@@ -1,5 +1,6 @@
 package com.espert.reeporteciudadano.platform
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.media.ExifInterface
 import android.net.Uri
@@ -22,7 +23,7 @@ actual fun CameraCapture(onPhotoTaken: (CapturedPhoto) -> Unit, onCancel: () -> 
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { success ->
         if (success) {
             val file = photoFile ?: return@rememberLauncherForActivityResult
-            val location = readExifLocation(file.absolutePath)
+            val location = readExifLocation(file.absolutePath) ?: getLastKnownLocation(context)
             onPhotoTaken(CapturedPhoto(UUID.randomUUID().toString(), file.absolutePath, location))
         } else {
             onCancel()
@@ -47,3 +48,12 @@ private fun readExifLocation(path: String): GeoLocation? = try {
     val latLon = FloatArray(2)
     if (exif.getLatLong(latLon)) GeoLocation(latLon[0].toDouble(), latLon[1].toDouble()) else null
 } catch (e: Exception) { null }
+
+@SuppressLint("MissingPermission")
+private fun getLastKnownLocation(context: Context): GeoLocation? {
+    val lm = context.getSystemService(Context.LOCATION_SERVICE) as android.location.LocationManager
+    return lm.getLastKnownLocation(android.location.LocationManager.GPS_PROVIDER)
+        ?.let { GeoLocation(it.latitude, it.longitude) }
+        ?: lm.getLastKnownLocation(android.location.LocationManager.NETWORK_PROVIDER)
+            ?.let { GeoLocation(it.latitude, it.longitude) }
+}

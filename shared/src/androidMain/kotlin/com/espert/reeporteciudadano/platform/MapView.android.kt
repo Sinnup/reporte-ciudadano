@@ -20,7 +20,11 @@ actual fun MapView(
     AndroidView(
         modifier = modifier,
         factory = { ctx: Context ->
-            Configuration.getInstance().userAgentValue = "ReporteCiudadano"
+            Configuration.getInstance().apply {
+                osmdroidBasePath = ctx.filesDir
+                osmdroidTileCache = java.io.File(ctx.cacheDir, "osmdroid")
+                userAgentValue = "ReporteCiudadano"
+            }
             OsmMapView(ctx).apply {
                 setTileSource(TileSourceFactory.MAPNIK)
                 setMultiTouchControls(true)
