@@ -75,6 +75,42 @@ Specialized agents live in `.claude/agents/`. Use them for their designated conc
 | `ux-ui-designer` | UI/UX design proposals per feature |
 | `business-analyst` | User story authoring and requirements |
 
+## Standard Feature Flow
+
+Every feature follows this pipeline without exception. Each stage hands off to the next:
+
+```
+1. ARCHITECT  → reads AppPurpose.md / user input
+               → writes analysis to architecture.md
+               → adds feature entry to features.md (Architect Notes section)
+
+2. BA         → reads architect's notes in features.md
+               → writes User Story + Acceptance Criteria into the feature entry
+               → sets status: Design
+
+3. DESIGNER   → reads User Story in features.md
+               → writes UX/UI Proposal into the feature entry
+               → iterates with BA until both approve
+               → sets status: Ready
+
+4. DEVELOPER  → reads features.md (status: Ready) + architecture.md
+               → creates branch: feature/feat-NNN-short-name
+               → implements following MVI + Clean Architecture
+               → sets status: In Progress
+
+5. QA         → writes unit tests for ViewModels and UseCases
+               → runs all test targets
+               → confirms tests pass on all platforms
+
+6. VERSIONING → updates changelog.md
+               → commits atomically with Conventional Commits
+               → prepares PR for merge to main
+               → sets status: Done
+```
+
+**Rule**: never start a new feature until the previous one is Done and merged.
+**Rule**: features are always triggered by invoking the `kmp-architect` agent first.
+
 ## Feature & Change Tracking
 
 - **`features.md`** — User stories written by the Business Analyst with UX/UI proposals. A feature must have an approved proposal before development starts.
