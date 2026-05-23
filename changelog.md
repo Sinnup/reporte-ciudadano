@@ -9,6 +9,12 @@ Format: `[version] — YYYY-MM-DD`
 
 ## [Unreleased]
 
+### Fixed — 2026-05-23
+
+- **Android** — osmdroid tile cache: set `osmdroidBasePath` and `osmdroidTileCache` to the app's private internal storage so the map renders correctly instead of showing the blue ocean background.
+- **Android** — camera location fallback: after `readExifLocation()` returns null (system camera does not embed GPS in EXIF by default), fall back to `LocationManager` (GPS_PROVIDER then NETWORK_PROVIDER) so the address field is populated.
+- **All platforms** — system bar overlap: wrapped the root composable in `Box(Modifier.windowInsetsPadding(WindowInsets.safeDrawing))` so the app content is padded away from the status bar, navigation bar, and display cutouts under `targetSdk=36` + `enableEdgeToEdge()`.
+
 ### Added
 - Project scaffolding: KMP (Android, iOS, Web) with Compose Multiplatform
 - CLAUDE.md with architecture and build guidance
