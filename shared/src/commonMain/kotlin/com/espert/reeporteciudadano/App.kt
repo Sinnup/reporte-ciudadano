@@ -1,49 +1,51 @@
 package com.espert.reeporteciudadano
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.safeContentPadding
-import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.tooling.preview.Preview
-import org.jetbrains.compose.resources.painterResource
-
-import reeporteciudadano.shared.generated.resources.Res
-import reeporteciudadano.shared.generated.resources.compose_multiplatform
+import com.espert.reeporteciudadano.feature.camera.CameraScreen
+import com.espert.reeporteciudadano.feature.camera.PhotoReviewScreen
+import com.espert.reeporteciudadano.feature.reportdetail.ReportDetailScreen
+import com.espert.reeporteciudadano.feature.reportform.ReportFormScreen
+import com.espert.reeporteciudadano.feature.shell.MainScreen
+import com.espert.reeporteciudadano.feature.thankyou.ThankYouScreen
+import com.espert.reeporteciudadano.navigation.*
+import org.koin.compose.viewmodel.koinViewModel
 
 @Composable
-@Preview
 fun App() {
     MaterialTheme {
-        var showContent by remember { mutableStateOf(false) }
-        Column(
-            modifier = Modifier
-                .background(MaterialTheme.colorScheme.primaryContainer)
-                .safeContentPadding()
-                .fillMaxSize(),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            Button(onClick = { showContent = !showContent }) {
-                Text("Click me!")
-            }
-            AnimatedVisibility(showContent) {
-                val greeting = remember { Greeting().greet() }
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                ) {
-                    Image(painterResource(Res.drawable.compose_multiplatform), null)
-                    Text("Compose: $greeting")
-                }
-            }
+        val appViewModel: AppViewModel = koinViewModel()
+        val destination by appViewModel.currentDestination.collectAsState()
+        val selectedTab by appViewModel.selectedTab.collectAsState()
+
+        when (val dest = destination) {
+            is NavDestination.MainShell -> MainScreen(
+                selectedTab = selectedTab,
+                onTabSelected = appViewModel::selectTab,
+                onRegisterPothole = { appViewModel.navigate(NavDestination.Camera) },
+                onReportSelected = { id -> appViewModel.navigate(NavDestination.ReportDetail(id)) }
+            )
+            is NavDestination.Camera -> CameraScreen(
+                onPhotosReady = { photos -> appViewModel.navigate(NavDestination.PhotoReview(photos)) },
+                onCancel = { appViewModel.back() }
+            )
+            is NavDestination.PhotoReview -> PhotoReviewScreen(
+                photos = dest.photos,
+                onContinue = { appViewModel.navigate(NavDestination.ReportForm(dest.photos)) },
+                onCancel = { appViewModel.backToMain() }
+            )
+            is NavDestination.ReportForm -> ReportFormScreen(
+                photos = dest.photos,
+                onSubmitted = { appViewModel.navigate(NavDestination.ThankYou) },
+                onCancel = { appViewModel.backToMain() }
+            )
+            is NavDestination.ThankYou -> ThankYouScreen(
+                onDone = { appViewModel.backToMain() }
+            )
+            is NavDestination.ReportDetail -> ReportDetailScreen(
+                reportId = dest.reportId,
+                onBack = { appViewModel.back() }
+            )
         }
     }
 }
