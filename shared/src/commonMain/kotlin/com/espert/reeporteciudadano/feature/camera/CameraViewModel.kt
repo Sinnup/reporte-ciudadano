@@ -18,6 +18,8 @@ class CameraViewModel : ViewModel() {
             CameraIntent.Complete -> _state.update { it.copy(showOptions = false) }
             CameraIntent.LocationDenied -> _state.update { it.copy(locationDenied = true) }
             CameraIntent.CameraDenied -> _state.update { it.copy(cameraDenied = true) }
+            CameraIntent.LocationServiceDisabled -> _state.update { it.copy(locationDisabled = true) }
+            CameraIntent.LocationServiceEnabled -> _state.update { it.copy(locationDisabled = false) }
         }
     }
 }

@@ -41,4 +41,7 @@
     <string name="back_content_description">Back</string>
     <string name="back_button">Back</string>
     <string name="reports_map_title">Reports Map</string>
+    <string name="location_service_disabled_title">Location Service Off</string>
+    <string name="location_service_disabled_body">Location services are turned off on your device. Please enable them in Settings to continue.</string>
+    <string name="go_to_settings_button">Go to Settings</string>
 </resources>

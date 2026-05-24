@@ -11,6 +11,16 @@ Format: `[version] — YYYY-MM-DD`
 
 ### Added — 2026-05-23
 
+- **FEAT-009** — Light/Dark Color Theme: introduced `AppTheme.kt` in `commonMain` with a full 24-role Material3 palette (civic green primary `#1A6B4A`, warm ochre tertiary `#8B5E3C`, off-white background `#F8FAF7` for light; mint primary `#8FCFAC`, warm gold tertiary `#F4BA87`, near-black background `#1A1C1A` for dark); `LightColorScheme` and `DarkColorScheme` are selected at runtime via `isSystemInDarkTheme()`; `App.kt` switches `MaterialTheme {}` to `AppTheme {}` and wraps the root in `Surface` to eliminate the dark-mode white flash; all WCAG AA contrast pairs pass at ≥4.5:1 in both schemes; zero hardcoded color values remain in the codebase.
+
+- **FEAT-010** — Location Service Gate: added `isLocationEnabled()`/`openLocationSettings()` expect/actual across Android, iOS, JS, and WasmJS; `CameraState` gains `locationDisabled: Boolean`; `CameraIntent` adds `LocationServiceDisabled` and `LocationServiceEnabled`; `CameraViewModel` calls `isLocationEnabled()` after permission is granted and sets the flag; `CameraScreen` renders `LocationDisabledContent` (full-screen, `LocationOff` icon in error tint, "Go to Settings" filled `Button`, "Cancel" `OutlinedButton`) when the flag is true; `LifecycleEventEffect(ON_RESUME)` auto-clears the gate when the user returns from device settings; three new string keys added to `values/strings.xml` and `values-es/strings.xml` (`location_service_disabled_title`, `location_service_disabled_body`, `go_to_settings_button`).
+
+### Fixed — 2026-05-23
+
+- **Android** — Camera location reliability: replaced the fragile `getLastKnownLocation()` call in `CameraCapture.android.kt` with `getCurrentDeviceLocation()`, a coroutine-based suspend function that runs in parallel with the camera session, tries all cached providers first, then registers `requestLocationUpdates` for a fresh fix; EXIF GPS still takes precedence and device location is the fallback.
+
+### Added — 2026-05-23
+
 - **FEAT-008** — Spanish translations: added `values/strings.xml` (43 English keys) and `values-es/strings.xml` (43 Spanish translations) using the Compose Multiplatform resource system; replaced every hardcoded string across 8 screens (`MainScreen`, `CameraScreen`, `PhotoReviewScreen`, `ReportFormScreen`, `ThankYouScreen`, `MyReportsScreen`, `ReportDetailScreen`, `ReportsMapScreen`) with `stringResource(Res.string.*)`; replaced `StatusChip`'s runtime `status.name.replace("_"," ")` with an exhaustive `when` expression so status labels are also translated; added `RequestCameraPermission` expect/actual for all platforms and a `CameraDenied` state to the camera flow; added `ReportStatusTest` (4 tests) verifying enum integrity.
 
 ### Fixed — 2026-05-23

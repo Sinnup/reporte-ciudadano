@@ -3,16 +3,21 @@ package com.espert.reeporteciudadano.feature.camera
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.LocationOff
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import com.espert.reeporteciudadano.navigation.CapturedPhoto
 import com.espert.reeporteciudadano.platform.CameraCapture
 import com.espert.reeporteciudadano.platform.RequestCameraPermission
 import com.espert.reeporteciudadano.platform.RequestLocationPermission
+import com.espert.reeporteciudadano.platform.isLocationEnabled
+import com.espert.reeporteciudadano.platform.openLocationSettings
 import org.jetbrains.compose.resources.stringResource
 import reeporteciudadano.shared.generated.resources.Res
 import reeporteciudadano.shared.generated.resources.*
@@ -38,8 +43,22 @@ fun CameraScreen(
         return
     }
 
+    if (state.locationDisabled) {
+        LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+            if (isLocationEnabled()) viewModel.processIntent(CameraIntent.LocationServiceEnabled)
+        }
+        LocationDisabledContent(onCancel = onCancel)
+        return
+    }
+
     RequestLocationPermission(
-        onGranted = { locationChecked = true },
+        onGranted = {
+            if (!isLocationEnabled()) {
+                viewModel.processIntent(CameraIntent.LocationServiceDisabled)
+            } else {
+                locationChecked = true
+            }
+        },
         onDenied = { viewModel.processIntent(CameraIntent.LocationDenied) }
     )
 
@@ -115,6 +134,35 @@ private fun CameraDeniedContent(onCancel: () -> Unit) {
                 style = MaterialTheme.typography.bodyMedium
             )
             OutlinedButton(onClick = onCancel) { Text(stringResource(Res.string.cancel_button)) }
+        }
+    }
+}
+
+@Composable
+private fun LocationDisabledContent(onCancel: () -> Unit) {
+    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+            modifier = Modifier.padding(32.dp)
+        ) {
+            Icon(
+                Icons.Default.LocationOff,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.error,
+                modifier = Modifier.size(48.dp)
+            )
+            Text(stringResource(Res.string.location_service_disabled_title), style = MaterialTheme.typography.titleLarge)
+            Text(
+                stringResource(Res.string.location_service_disabled_body),
+                style = MaterialTheme.typography.bodyMedium
+            )
+            Button(onClick = { openLocationSettings() }, modifier = Modifier.fillMaxWidth()) {
+                Text(stringResource(Res.string.go_to_settings_button))
+            }
+            OutlinedButton(onClick = onCancel, modifier = Modifier.fillMaxWidth()) {
+                Text(stringResource(Res.string.cancel_button))
+            }
         }
     }
 }
