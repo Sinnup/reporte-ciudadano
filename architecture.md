@@ -147,8 +147,8 @@ The build plugin generates a type-safe `Res.string.*` accessor object at compile
 
 ```kotlin
 import org.jetbrains.compose.resources.stringResource
-import com.espert.reeporteciudadano.shared.generated.resources.Res
-import com.espert.reeporteciudadano.shared.generated.resources.*
+import com.espert.reporteciudadano.shared.generated.resources.Res
+import com.espert.reporteciudadano.shared.generated.resources.*
 
 Text(stringResource(Res.string.tab_report))
 ```
@@ -383,7 +383,7 @@ All values are ARGB hex. Both schemes must meet WCAG AA contrast (4.5:1 text on 
 One new file is introduced in `commonMain`:
 
 ```
-shared/src/commonMain/kotlin/com/espert/reeporteciudadano/AppTheme.kt
+shared/src/commonMain/kotlin/com/espert/reporteciudadano/AppTheme.kt
 ```
 
 It declares:
@@ -442,7 +442,7 @@ Translations are already complete and marked Done in `features.md`; no localizat
 
 Two new `expect fun` declarations are added to `commonMain` in the existing `platform/` package. They are grouped in a new file to keep `LocationPermission.kt` focused on the composable permission flow:
 
-**File**: `shared/src/commonMain/kotlin/com/espert/reeporteciudadano/platform/LocationStatus.kt`
+**File**: `shared/src/commonMain/kotlin/com/espert/reporteciudadano/platform/LocationStatus.kt`
 
 ```kotlin
 // Returns true if the device location service (GPS or network) is active.

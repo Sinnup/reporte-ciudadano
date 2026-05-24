@@ -22,11 +22,11 @@ dependencies {
 }
 
 android {
-    namespace = "com.espert.reeporteciudadano"
+    namespace = "com.espert.reporteciudadano"
     compileSdk = libs.versions.android.compileSdk.get().toInt()
 
     defaultConfig {
-        applicationId = "com.espert.reeporteciudadano"
+        applicationId = "com.espert.reporteciudadano"
         minSdk = libs.versions.android.minSdk.get().toInt()
         targetSdk = libs.versions.android.targetSdk.get().toInt()
         versionCode = 1

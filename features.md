@@ -343,7 +343,7 @@ _ReportsMapScreen_: `reports_map_title`
 
 Layer impact: Presentation only. No domain, data, or Koin changes required.
 
-A single new file — `AppTheme.kt` — is introduced in `commonMain` at `shared/src/commonMain/kotlin/com/espert/reeporteciudadano/`. It contains two private `ColorScheme` vals (`LightColorScheme` and `DarkColorScheme`) built with Material3's `lightColorScheme()` and `darkColorScheme()` factory functions, and a `@Composable fun AppTheme(content: @Composable () -> Unit)` wrapper that calls `isSystemInDarkTheme()` to select the active scheme and delegates to `MaterialTheme(colorScheme = ..., content = content)`.
+A single new file — `AppTheme.kt` — is introduced in `commonMain` at `shared/src/commonMain/kotlin/com/espert/reporteciudadano/`. It contains two private `ColorScheme` vals (`LightColorScheme` and `DarkColorScheme`) built with Material3's `lightColorScheme()` and `darkColorScheme()` factory functions, and a `@Composable fun AppTheme(content: @Composable () -> Unit)` wrapper that calls `isSystemInDarkTheme()` to select the active scheme and delegates to `MaterialTheme(colorScheme = ..., content = content)`.
 
 `App.kt` changes one call site: `MaterialTheme { }` becomes `AppTheme { }`. No other file changes.
 
@@ -483,7 +483,7 @@ Layer impact: Presentation (CameraScreen, CameraState, CameraIntent, CameraViewM
 
 **The gap being closed**: the app already gates on location *permission* (user's OS dialog answer) but not on whether the device location service (GPS/network provider) is *enabled* in device settings. A user who grants the permission but has location services turned off in settings will silently get a `null` location, producing a report with no coordinates.
 
-**New platform contract** — file `shared/src/commonMain/kotlin/com/espert/reeporteciudadano/platform/LocationStatus.kt`:
+**New platform contract** — file `shared/src/commonMain/kotlin/com/espert/reporteciudadano/platform/LocationStatus.kt`:
 - `expect fun isLocationEnabled(): Boolean` — synchronous check, no side effects
 - `expect fun openLocationSettings()` — fire-and-forget platform side-effect to open device location settings
 

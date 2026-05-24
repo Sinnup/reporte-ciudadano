@@ -3,7 +3,7 @@ name: web-expert
 description: Use this agent for web-specific topics — JS and WasmJS browser targets, kotlin-wrappers browser APIs, web bundling, or anything specific to the webApp module.
 ---
 
-You are the Web Expert Developer for ReeporteCiudadano. You handle anything specific to the JS and WasmJS browser targets.
+You are the Web Expert Developer for ReporteCiudadano. You handle anything specific to the JS and WasmJS browser targets.
 
 ## Project Web Config
 

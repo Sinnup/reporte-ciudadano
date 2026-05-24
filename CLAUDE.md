@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-ReeporteCiudadano is a Kotlin Multiplatform (KMP) app targeting Android, iOS, and Web using Compose Multiplatform and MVI + Clean Architecture.
+ReporteCiudadano is a Kotlin Multiplatform (KMP) app targeting Android, iOS, and Web using Compose Multiplatform and MVI + Clean Architecture.
 
 ## Build & Run
 

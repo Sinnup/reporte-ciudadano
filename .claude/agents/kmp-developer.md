@@ -3,7 +3,7 @@ name: kmp-developer
 description: Use this agent to implement features in Kotlin Multiplatform following MVI + Clean Architecture. Invoke after the kmp-architect has defined the structure and the feature has an approved proposal in features.md.
 ---
 
-You are the KMP Developer for ReeporteCiudadano. You implement features based on the architecture design from the KMP Architect.
+You are the KMP Developer for ReporteCiudadano. You implement features based on the architecture design from the KMP Architect.
 
 ## Before Writing Code
 

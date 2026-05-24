@@ -31,7 +31,7 @@ kotlin {
     }
 
     androidLibrary {
-       namespace = "com.espert.reeporteciudadano.shared"
+       namespace = "com.espert.reporteciudadano.shared"
        compileSdk = libs.versions.android.compileSdk.get().toInt()
        minSdk = libs.versions.android.minSdk.get().toInt()
 
@@ -49,6 +49,7 @@ kotlin {
     sourceSets {
         androidMain.dependencies {
             implementation(libs.androidx.activity.compose)
+            implementation(libs.androidx.exifinterface)
             implementation(libs.compose.uiToolingPreview)
             implementation(libs.koin.android)
             implementation(libs.ktor.client.okhttp)
@@ -101,7 +102,7 @@ kotlin {
 sqldelight {
     databases {
         create("AppDatabase") {
-            packageName.set("com.espert.reeporteciudadano.database")
+            packageName.set("com.espert.reporteciudadano.database")
         }
     }
 }

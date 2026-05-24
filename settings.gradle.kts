@@ -1,4 +1,4 @@
-rootProject.name = "ReeporteCiudadano"
+rootProject.name = "ReporteCiudadano"
 enableFeaturePreview("TYPESAFE_PROJECT_ACCESSORS")
 
 pluginManagement {

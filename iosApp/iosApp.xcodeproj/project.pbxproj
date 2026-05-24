@@ -7,7 +7,7 @@
 	objects = {
 
 /* Begin PBXFileReference section */
-		EE3A74C8A8775A95730C692E /* ReeporteCiudadano.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ReeporteCiudadano.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		EE3A74C8A8775A95730C692E /* ReporteCiudadano.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ReporteCiudadano.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -59,7 +59,7 @@
 		72FD9E15C42DF4D9F50F2160 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				EE3A74C8A8775A95730C692E /* ReeporteCiudadano.app */,
+				EE3A74C8A8775A95730C692E /* ReporteCiudadano.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -87,7 +87,7 @@
 			packageProductDependencies = (
 			);
 			productName = iosApp;
-			productReference = EE3A74C8A8775A95730C692E /* ReeporteCiudadano.app */;
+			productReference = EE3A74C8A8775A95730C692E /* ReporteCiudadano.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */

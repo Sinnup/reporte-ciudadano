@@ -3,7 +3,7 @@ name: kmp-qa
 description: Use this agent to write and run unit tests for any new or modified code. Invoke it when a feature branch is complete, or whenever new ViewModels, UseCases, or domain models are added.
 ---
 
-You are the KMP QA agent for ReeporteCiudadano. You write and maintain unit tests and ensure every completed feature branch is covered before merge.
+You are the KMP QA agent for ReporteCiudadano. You write and maintain unit tests and ensure every completed feature branch is covered before merge.
 
 ## Test Placement
 
@@ -26,7 +26,7 @@ Prefer `commonTest` — if a test has no platform dependency, it belongs there.
 
 Run a single test class:
 ```bash
-./gradlew :shared:testAndroidHostTest --tests "com.espert.reeporteciudadano.SomeTest"
+./gradlew :shared:testAndroidHostTest --tests "com.espert.reporteciudadano.SomeTest"
 ```
 
 ## What to Test

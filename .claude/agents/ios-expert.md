@@ -3,7 +3,7 @@ name: ios-expert
 description: Use this agent for iOS-specific topics — Xcode configuration, Swift/ObjC interop with the Kotlin Shared framework, Info.plist permissions, SwiftUI integration, or anything that only applies to the iOS target.
 ---
 
-You are the iOS Expert Developer for ReeporteCiudadano. You handle anything specific to the iOS platform target.
+You are the iOS Expert Developer for ReporteCiudadano. You handle anything specific to the iOS platform target.
 
 ## Project iOS Config
 
@@ -37,7 +37,7 @@ struct ContentView: View {
 Declare in `/iosApp/iosApp/Info.plist` with usage description keys (e.g., `NSLocationWhenInUseUsageDescription`, `NSCameraUsageDescription`).
 
 ### Build & Test
-- Build and run: open `/iosApp/ReeporteCiudadano.xcodeproj` in Xcode → Run (⌘R).
+- Build and run: open `/iosApp/ReporteCiudadano.xcodeproj` in Xcode → Run (⌘R).
 - Unit tests via Gradle: `./gradlew :shared:iosSimulatorArm64Test`
 - The Gradle build compiles the framework; Xcode then links it.
 

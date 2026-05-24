@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to ReeporteCiudadano are documented here.
+All notable changes to ReporteCiudadano are documented here.
 Updated per completed feature before merging to `main`.
 
 Format: `[version] — YYYY-MM-DD`
