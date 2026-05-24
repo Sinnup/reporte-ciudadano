@@ -27,7 +27,7 @@ import org.koin.core.parameter.parametersOf
 fun ReportDetailScreen(
     reportId: String,
     onBack: () -> Unit,
-    viewModel: ReportDetailViewModel = koinViewModel(parameters = { parametersOf(reportId) })
+    viewModel: ReportDetailViewModel = koinViewModel(key = reportId, parameters = { parametersOf(reportId) })
 ) {
     val state by viewModel.state.collectAsState()
 

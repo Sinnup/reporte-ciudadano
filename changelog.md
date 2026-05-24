@@ -19,6 +19,10 @@ Format: `[version] — YYYY-MM-DD`
 
 - **FEAT-010** — Location Service Gate: added `isLocationEnabled()`/`openLocationSettings()` expect/actual across Android, iOS, JS, and WasmJS; `CameraState` gains `locationDisabled: Boolean`; `CameraIntent` adds `LocationServiceDisabled` and `LocationServiceEnabled`; `CameraViewModel` calls `isLocationEnabled()` after permission is granted and sets the flag; `CameraScreen` renders `LocationDisabledContent` (full-screen, `LocationOff` icon in error tint, "Go to Settings" filled `Button`, "Cancel" `OutlinedButton`) when the flag is true; `LifecycleEventEffect(ON_RESUME)` auto-clears the gate when the user returns from device settings; three new string keys added to `values/strings.xml` and `values-es/strings.xml` (`location_service_disabled_title`, `location_service_disabled_body`, `go_to_settings_button`).
 
+### Fixed — 2026-05-24
+
+- **ReportDetailScreen** — Report detail always showed the same report: `koinViewModel` was scoped to the Activity's `ViewModelStore` (custom nav stack, not Jetpack Navigation), so every navigation to a report detail reused the first ViewModel instance regardless of the report ID. Fixed by passing `key = reportId` to the `koinViewModel` call so each report ID gets its own isolated ViewModel instance.
+
 ### Fixed — 2026-05-23
 
 - **Android** — System back button navigation: registered `OnBackPressedCallback` in `MainActivity` that delegates to `AppViewModel.back()`; when the stack is at root the callback yields to the system (exits the app) and then re-enables, so pressing back on any inner screen now navigates within the app instead of immediately closing it.
