@@ -19,6 +19,7 @@ Format: `[version] — YYYY-MM-DD`
 
 ### Fixed — 2026-05-23
 
+- **Android** — System back button navigation: registered `OnBackPressedCallback` in `MainActivity` that delegates to `AppViewModel.back()`; when the stack is at root the callback yields to the system (exits the app) and then re-enables, so pressing back on any inner screen now navigates within the app instead of immediately closing it.
 - **Android** — Camera location reliability: replaced the fragile `getLastKnownLocation()` call in `CameraCapture.android.kt` with `getCurrentDeviceLocation()`, a coroutine-based suspend function that runs in parallel with the camera session, tries all cached providers first, then registers `requestLocationUpdates` for a fresh fix; EXIF GPS still takes precedence and device location is the fallback.
 
 ### Added — 2026-05-23
