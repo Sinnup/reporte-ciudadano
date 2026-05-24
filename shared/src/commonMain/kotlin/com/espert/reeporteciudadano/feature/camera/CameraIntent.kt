@@ -9,4 +9,6 @@ sealed class CameraIntent {
     object Complete : CameraIntent()
     object LocationDenied : CameraIntent()
     object CameraDenied : CameraIntent()
+    object LocationServiceDisabled : CameraIntent()
+    object LocationServiceEnabled : CameraIntent()
 }

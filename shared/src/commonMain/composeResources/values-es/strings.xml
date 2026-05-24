@@ -41,4 +41,7 @@
     <string name="back_content_description">Atrás</string>
     <string name="back_button">Atrás</string>
     <string name="reports_map_title">Mapa de reportes</string>
+    <string name="location_service_disabled_title">Servicio de ubicación desactivado</string>
+    <string name="location_service_disabled_body">Los servicios de ubicación están desactivados en tu dispositivo. Por favor, actívalos en Configuración para continuar.</string>
+    <string name="go_to_settings_button">Ir a Configuración</string>
 </resources>
