@@ -11,6 +11,8 @@ Format: `[version] — YYYY-MM-DD`
 
 ### Added — 2026-05-23
 
+- **`migration-expert` agent** — New Claude Code agent for dependency lifecycle management: audits `gradle/libs.versions.toml` and all `build.gradle.kts` files, looks up latest stable releases from authoritative registries, evaluates breaking changes, applies upgrades in safe order (Kotlin → KSP → AGP → Compose → kotlinx → Ktor → SQLDelight → Koin), verifies compilation and tests across all KMP targets, and hands off to `versioning` for commit. Pre-release pins trigger a user prompt before touching them.
+
 - **App Icon** — Custom adaptive icon: white location-pin silhouette with embedded pothole and crack lines on a civic-green (`#1A6B4A`) background; ships as a full adaptive icon set (foreground/background layers) on Android and as a flat icon on iOS and Web.
 
 - **FEAT-009** — Light/Dark Color Theme: introduced `AppTheme.kt` in `commonMain` with a full 24-role Material3 palette (civic green primary `#1A6B4A`, warm ochre tertiary `#8B5E3C`, off-white background `#F8FAF7` for light; mint primary `#8FCFAC`, warm gold tertiary `#F4BA87`, near-black background `#1A1C1A` for dark); `LightColorScheme` and `DarkColorScheme` are selected at runtime via `isSystemInDarkTheme()`; `App.kt` switches `MaterialTheme {}` to `AppTheme {}` and wraps the root in `Surface` to eliminate the dark-mode white flash; all WCAG AA contrast pairs pass at ≥4.5:1 in both schemes; zero hardcoded color values remain in the codebase.
