@@ -11,6 +11,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
+import org.jetbrains.compose.resources.stringResource
+import reeporteciudadano.shared.generated.resources.Res
+import reeporteciudadano.shared.generated.resources.*
 
 @Composable
 fun ThankYouScreen(onDone: () -> Unit) {
@@ -35,9 +38,9 @@ fun ThankYouScreen(onDone: () -> Unit) {
                 tint = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.size(80.dp)
             )
-            Text("Thank you for your report!", style = MaterialTheme.typography.headlineMedium)
+            Text(stringResource(Res.string.thank_you_headline), style = MaterialTheme.typography.headlineMedium)
             Text(
-                "Your contribution helps improve our city. Public officials have been notified and will consider your report.",
+                stringResource(Res.string.thank_you_body),
                 style = MaterialTheme.typography.bodyLarge
             )
             LinearProgressIndicator(progress = { animatedProgress }, modifier = Modifier.fillMaxWidth())

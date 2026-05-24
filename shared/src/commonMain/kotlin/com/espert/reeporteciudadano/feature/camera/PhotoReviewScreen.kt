@@ -13,7 +13,11 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.espert.reeporteciudadano.navigation.CapturedPhoto
+import org.jetbrains.compose.resources.stringResource
+import reeporteciudadano.shared.generated.resources.Res
+import reeporteciudadano.shared.generated.resources.*
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PhotoReviewScreen(
     photos: List<CapturedPhoto>,
@@ -22,9 +26,9 @@ fun PhotoReviewScreen(
 ) {
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("Review Photos") },
-                navigationIcon = { IconButton(onClick = onCancel) { Icon(Icons.Default.Close, "Cancel") } }
+            CenterAlignedTopAppBar(
+                title = { Text(stringResource(Res.string.review_photos_title)) },
+                navigationIcon = { IconButton(onClick = onCancel) { Icon(Icons.Default.Close, stringResource(Res.string.cancel_content_description)) } }
             )
         },
         bottomBar = {
@@ -34,7 +38,7 @@ fun PhotoReviewScreen(
                     enabled = photos.isNotEmpty(),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("Continue")
+                    Text(stringResource(Res.string.continue_button))
                 }
             }
         }
@@ -42,7 +46,7 @@ fun PhotoReviewScreen(
         Column(Modifier.padding(padding).fillMaxSize()) {
             if (photos.isEmpty()) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("No photos taken yet.")
+                    Text(stringResource(Res.string.no_photos_message))
                 }
             } else {
                 LazyRow(
@@ -53,7 +57,7 @@ fun PhotoReviewScreen(
                         Box {
                             AsyncImage(
                                 model = photo.localPath,
-                                contentDescription = "Photo",
+                                contentDescription = stringResource(Res.string.photo_content_description),
                                 contentScale = ContentScale.Crop,
                                 modifier = Modifier.size(160.dp)
                             )

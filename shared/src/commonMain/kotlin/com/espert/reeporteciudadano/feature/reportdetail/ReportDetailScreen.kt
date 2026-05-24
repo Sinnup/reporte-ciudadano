@@ -16,9 +16,13 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.espert.reeporteciudadano.feature.myreports.StatusChip
+import org.jetbrains.compose.resources.stringResource
+import reeporteciudadano.shared.generated.resources.Res
+import reeporteciudadano.shared.generated.resources.*
 import org.koin.compose.viewmodel.koinViewModel
 import org.koin.core.parameter.parametersOf
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ReportDetailScreen(
     reportId: String,
@@ -29,9 +33,9 @@ fun ReportDetailScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("Report Detail") },
-                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") } }
+            CenterAlignedTopAppBar(
+                title = { Text(stringResource(Res.string.report_detail_title)) },
+                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(Res.string.back_content_description)) } }
             )
         }
     ) { padding ->
@@ -42,9 +46,9 @@ fun ReportDetailScreen(
                     Modifier.align(Alignment.Center),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Text("Could not load report")
+                    Text(stringResource(Res.string.could_not_load_report))
                     Spacer(Modifier.height(8.dp))
-                    OutlinedButton(onClick = onBack) { Text("Back") }
+                    OutlinedButton(onClick = onBack) { Text(stringResource(Res.string.back_button)) }
                 }
                 state.report != null -> {
                     val report = state.report!!

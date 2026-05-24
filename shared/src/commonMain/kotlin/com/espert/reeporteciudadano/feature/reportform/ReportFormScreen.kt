@@ -16,8 +16,12 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.espert.reeporteciudadano.navigation.CapturedPhoto
+import org.jetbrains.compose.resources.stringResource
+import reeporteciudadano.shared.generated.resources.Res
+import reeporteciudadano.shared.generated.resources.*
 import org.koin.compose.viewmodel.koinViewModel
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ReportFormScreen(
     photos: List<CapturedPhoto>,
@@ -33,11 +37,11 @@ fun ReportFormScreen(
     if (state.showDisclaimer) {
         AlertDialog(
             onDismissRequest = {},
-            title = { Text("About the address") },
-            text = { Text("The address shown may be approximate based on the photo's GPS coordinates.") },
+            title = { Text(stringResource(Res.string.address_dialog_title)) },
+            text = { Text(stringResource(Res.string.address_dialog_body)) },
             confirmButton = {
                 Button(onClick = { viewModel.processIntent(ReportFormIntent.DismissDisclaimer) }) {
-                    Text("Got it")
+                    Text(stringResource(Res.string.got_it_button))
                 }
             }
         )
@@ -45,9 +49,9 @@ fun ReportFormScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("New Report") },
-                navigationIcon = { IconButton(onClick = onCancel) { Icon(Icons.Default.Close, "Cancel") } }
+            CenterAlignedTopAppBar(
+                title = { Text(stringResource(Res.string.new_report_title)) },
+                navigationIcon = { IconButton(onClick = onCancel) { Icon(Icons.Default.Close, stringResource(Res.string.cancel_content_description)) } }
             )
         },
         bottomBar = {
@@ -58,7 +62,7 @@ fun ReportFormScreen(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     if (state.isSubmitting) CircularProgressIndicator(Modifier.size(20.dp))
-                    else Text("Submit Report")
+                    else Text(stringResource(Res.string.submit_report_button))
                 }
             }
         }
@@ -85,14 +89,14 @@ fun ReportFormScreen(
                 OutlinedTextField(
                     value = state.title,
                     onValueChange = { viewModel.processIntent(ReportFormIntent.TitleChanged(it)) },
-                    label = { Text("Title *") },
+                    label = { Text(stringResource(Res.string.title_field_label)) },
                     supportingText = { Text("${state.title.length}/100") },
                     modifier = Modifier.fillMaxWidth()
                 )
                 OutlinedTextField(
                     value = state.description,
                     onValueChange = { viewModel.processIntent(ReportFormIntent.DescriptionChanged(it)) },
-                    label = { Text("Description *") },
+                    label = { Text(stringResource(Res.string.description_field_label)) },
                     supportingText = { Text("${state.description.length}/500") },
                     minLines = 3,
                     modifier = Modifier.fillMaxWidth()

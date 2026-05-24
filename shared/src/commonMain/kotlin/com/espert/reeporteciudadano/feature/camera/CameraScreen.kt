@@ -2,6 +2,7 @@ package com.espert.reeporteciudadano.feature.camera
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -10,7 +11,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.espert.reeporteciudadano.navigation.CapturedPhoto
 import com.espert.reeporteciudadano.platform.CameraCapture
+import com.espert.reeporteciudadano.platform.RequestCameraPermission
 import com.espert.reeporteciudadano.platform.RequestLocationPermission
+import org.jetbrains.compose.resources.stringResource
+import reeporteciudadano.shared.generated.resources.Res
+import reeporteciudadano.shared.generated.resources.*
 import org.koin.compose.viewmodel.koinViewModel
 
 @Composable
@@ -20,32 +25,48 @@ fun CameraScreen(
     viewModel: CameraViewModel = koinViewModel()
 ) {
     val state by viewModel.state.collectAsState()
+    var locationChecked by remember { mutableStateOf(false) }
+    var cameraChecked by remember { mutableStateOf(false) }
 
     if (state.locationDenied) {
         LocationDeniedContent(onCancel = onCancel)
         return
     }
 
+    if (state.cameraDenied) {
+        CameraDeniedContent(onCancel = onCancel)
+        return
+    }
+
     RequestLocationPermission(
-        onGranted = {},
+        onGranted = { locationChecked = true },
         onDenied = { viewModel.processIntent(CameraIntent.LocationDenied) }
     )
+
+    if (locationChecked) {
+        RequestCameraPermission(
+            onGranted = { cameraChecked = true },
+            onDenied = { viewModel.processIntent(CameraIntent.CameraDenied) }
+        )
+    }
+
+    if (!cameraChecked) return
 
     if (state.showOptions) {
         AlertDialog(
             onDismissRequest = {},
-            title = { Text("Photo taken") },
-            text = { Text("What would you like to do?") },
+            title = { Text(stringResource(Res.string.photo_taken_dialog_title)) },
+            text = { Text(stringResource(Res.string.photo_taken_dialog_body)) },
             confirmButton = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     if (!state.isFull) {
-                        TextButton(onClick = { viewModel.processIntent(CameraIntent.KeepTaking) }) { Text("Keep taking") }
+                        TextButton(onClick = { viewModel.processIntent(CameraIntent.KeepTaking) }) { Text(stringResource(Res.string.keep_taking_button)) }
                     }
-                    TextButton(onClick = { viewModel.processIntent(CameraIntent.DeletePhoto(state.photos.last().id)) }) { Text("Retake") }
+                    TextButton(onClick = { viewModel.processIntent(CameraIntent.DeletePhoto(state.photos.last().id)) }) { Text(stringResource(Res.string.retake_button)) }
                     Button(onClick = {
                         viewModel.processIntent(CameraIntent.Complete)
                         onPhotosReady(state.photos)
-                    }) { Text("Complete") }
+                    }) { Text(stringResource(Res.string.complete_button)) }
                 }
             },
             dismissButton = {}
@@ -69,12 +90,31 @@ private fun LocationDeniedContent(onCancel: () -> Unit) {
             modifier = Modifier.padding(32.dp)
         ) {
             Icon(Icons.Default.LocationOn, contentDescription = null, modifier = Modifier.size(48.dp))
-            Text("Location Required", style = MaterialTheme.typography.titleLarge)
+            Text(stringResource(Res.string.location_required_title), style = MaterialTheme.typography.titleLarge)
             Text(
-                "Location access is needed to tag photos with GPS coordinates. Please enable location in Settings.",
+                stringResource(Res.string.location_required_body),
                 style = MaterialTheme.typography.bodyMedium
             )
-            OutlinedButton(onClick = onCancel) { Text("Cancel") }
+            OutlinedButton(onClick = onCancel) { Text(stringResource(Res.string.cancel_button)) }
+        }
+    }
+}
+
+@Composable
+private fun CameraDeniedContent(onCancel: () -> Unit) {
+    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+            modifier = Modifier.padding(32.dp)
+        ) {
+            Icon(Icons.Default.CameraAlt, contentDescription = null, modifier = Modifier.size(48.dp))
+            Text(stringResource(Res.string.camera_required_title), style = MaterialTheme.typography.titleLarge)
+            Text(
+                stringResource(Res.string.camera_required_body),
+                style = MaterialTheme.typography.bodyMedium
+            )
+            OutlinedButton(onClick = onCancel) { Text(stringResource(Res.string.cancel_button)) }
         }
     }
 }
