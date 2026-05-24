@@ -279,6 +279,62 @@ Material3: `CenterAlignedTopAppBar` (containerColor with alpha).
 
 ---
 
+### [FEAT-008] Spanish Translations
+
+**Status**: `Done`
+
+**Architect Notes**
+
+This feature adds full Spanish (es) localization to every user-visible string in the app, with English (en) as the default and fallback. It is a pure resource + UI change within `:shared` — no new Gradle submodule, no domain or data layer changes, no new library dependencies.
+
+**Resource structure**
+
+Compose Multiplatform's built-in resource system (`org.jetbrains.compose.components:components-resources`) is already wired in `shared/build.gradle.kts`. Two XML files are required:
+
+```
+shared/src/commonMain/composeResources/
+  values/strings.xml          ← English (default / fallback)
+  values-es/strings.xml       ← Spanish overrides (same key set)
+```
+
+The build plugin generates a type-safe `Res.string.*` accessor. All composables call `stringResource(Res.string.<key>)`.
+
+**Locale detection**
+
+No platform-specific code is needed. The CMP resource framework resolves the device locale automatically on all three targets (Android via system locale, iOS via `NSLocale`, JS/WasmJS via `navigator.language`).
+
+**String keys per screen**
+
+_Shell / Navigation (MainScreen)_: `tab_report`, `tab_my_reports`, `tab_map`, `report_tab_headline`, `register_pothole_button`
+
+_CameraScreen_: `location_required_title`, `location_required_body`, `camera_required_title`, `camera_required_body`, `cancel_button`, `photo_taken_dialog_title`, `photo_taken_dialog_body`, `keep_taking_button`, `retake_button`, `complete_button`
+
+_PhotoReviewScreen_: `review_photos_title`, `no_photos_message`, `continue_button`, `cancel_content_description`, `photo_content_description`
+
+_ReportFormScreen_: `new_report_title`, `address_dialog_title`, `address_dialog_body`, `got_it_button`, `title_field_label`, `description_field_label`, `submit_report_button` (shares `cancel_button` and `cancel_content_description` from camera)
+
+_ThankYouScreen_: `thank_you_headline`, `thank_you_body`
+
+_MyReportsScreen_: `my_reports_title`, `no_reports_message`, `status_sent`, `status_seen`, `status_pending`, `status_in_progress`, `status_resolved`, `status_discarded`
+
+_ReportDetailScreen_: `report_detail_title`, `could_not_load_report`, `back_content_description`, `back_button`
+
+_ReportsMapScreen_: `reports_map_title`
+
+**Special case — StatusChip**
+
+`ReportStatus.name.replace("_", " ")` must be replaced with an exhaustive `when` expression that maps each enum variant to its `Res.string.*` key. This is the only non-trivial code change beyond mechanical string replacements.
+
+**Koin module impact**: none. No new ViewModels, UseCases, or repositories.
+
+**User Story** *(Business Analyst)*
+
+**Acceptance Criteria**
+
+**UX/UI Proposal** *(Designer)*
+
+---
+
 ## Template (for new features)
 
 ### [FEAT-000] Feature Title

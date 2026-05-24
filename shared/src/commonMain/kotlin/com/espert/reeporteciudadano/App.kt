@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.*
+import androidx.compose.ui.Modifier
 import com.espert.reeporteciudadano.feature.camera.CameraScreen
 import com.espert.reeporteciudadano.feature.camera.PhotoReviewScreen
 import com.espert.reeporteciudadano.feature.reportdetail.ReportDetailScreen

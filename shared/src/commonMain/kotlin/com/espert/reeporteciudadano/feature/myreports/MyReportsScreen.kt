@@ -10,8 +10,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.espert.reeporteciudadano.domain.model.ReportStatus
+import org.jetbrains.compose.resources.stringResource
+import reeporteciudadano.shared.generated.resources.Res
+import reeporteciudadano.shared.generated.resources.*
 import org.koin.compose.viewmodel.koinViewModel
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MyReportsScreen(
     onReportSelected: (String) -> Unit,
@@ -20,13 +24,13 @@ fun MyReportsScreen(
     val state by viewModel.state.collectAsState()
 
     Scaffold(
-        topBar = { CenterAlignedTopAppBar(title = { Text("My Reports") }) }
+        topBar = { CenterAlignedTopAppBar(title = { Text(stringResource(Res.string.my_reports_title)) }) }
     ) { padding ->
         Box(Modifier.padding(padding).fillMaxSize()) {
             when {
                 state.isLoading -> CircularProgressIndicator(Modifier.align(Alignment.Center))
                 state.reports.isEmpty() -> Text(
-                    "No reports yet. Tap 'Report' to submit your first one.",
+                    stringResource(Res.string.no_reports_message),
                     Modifier.align(Alignment.Center).padding(32.dp)
                 )
                 else -> LazyColumn {
@@ -66,7 +70,17 @@ fun StatusChip(status: ReportStatus) {
     }
     SuggestionChip(
         onClick = {},
-        label = { Text(status.name.replace("_", " ")) },
+        label = { Text(statusLabel(status)) },
         colors = SuggestionChipDefaults.suggestionChipColors(containerColor = containerColor)
     )
+}
+
+@Composable
+private fun statusLabel(status: ReportStatus): String = when (status) {
+    ReportStatus.SENT        -> stringResource(Res.string.status_sent)
+    ReportStatus.SEEN        -> stringResource(Res.string.status_seen)
+    ReportStatus.PENDING     -> stringResource(Res.string.status_pending)
+    ReportStatus.IN_PROGRESS -> stringResource(Res.string.status_in_progress)
+    ReportStatus.RESOLVED    -> stringResource(Res.string.status_resolved)
+    ReportStatus.DISCARDED   -> stringResource(Res.string.status_discarded)
 }

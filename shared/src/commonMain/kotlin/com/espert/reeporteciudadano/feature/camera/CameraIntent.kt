@@ -8,4 +8,5 @@ sealed class CameraIntent {
     object KeepTaking : CameraIntent()
     object Complete : CameraIntent()
     object LocationDenied : CameraIntent()
+    object CameraDenied : CameraIntent()
 }
