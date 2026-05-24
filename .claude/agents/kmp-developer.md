@@ -19,6 +19,43 @@ You are the KMP Developer for ReporteCiudadano. You implement features based on 
 - Process intents via a single `fun processIntent(intent: Intent)` function.
 - Side effects (navigation, snackbars) go in a separate `SharedFlow<Effect>`.
 
+#### Activity-scoped ViewModel lifetime (critical)
+
+All ViewModels in this app are **scoped to the Activity** via `koinViewModel()` and are **never destroyed between navigation sessions**. Every ViewModel that owns a flow (camera, form, etc.) will be reused on the second visit with whatever state it had at the end of the first visit.
+
+Two mandatory patterns — apply whenever a ViewModel drives a repeatable user flow:
+
+**1. One-shot navigation events — use `Channel`, never a boolean flag in State.**
+
+A `submitted: Boolean = true` left in State will cause `LaunchedEffect(state.submitted)` to fire immediately on the next visit, skipping the screen entirely.
+
+```kotlin
+// ViewModel
+private val _submitted = Channel<Unit>(Channel.BUFFERED)
+val submitted = _submitted.receiveAsFlow()
+
+// in the suspend operation:
+_submitted.send(Unit)
+
+// Screen
+LaunchedEffect(Unit) { viewModel.submitted.collect { onSubmitted() } }
+```
+
+**2. Per-session state accumulation — add a `Reset` intent.**
+
+ViewModels that accumulate state (e.g., a photo list) must expose a `Reset` intent that restores `_state.value = <DefaultState>()`. Call it from a `LaunchedEffect(Unit)` at the top of the composable so each new visit starts clean.
+
+```kotlin
+// Intent
+object Reset : CameraIntent()
+
+// ViewModel
+CameraIntent.Reset -> _state.value = CameraState()
+
+// Screen
+LaunchedEffect(Unit) { viewModel.processIntent(CameraIntent.Reset) }
+```
+
 ```kotlin
 class ReportViewModel(
     private val submitReportUseCase: SubmitReportUseCase

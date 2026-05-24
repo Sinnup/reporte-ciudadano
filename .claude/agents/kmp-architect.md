@@ -96,6 +96,24 @@ All features must use these libraries consistently across the project. Do not in
 - **Koin**: one `Module` per feature, loaded at app startup. `ViewModel`s are declared with `viewModel { }` in the feature's Koin module.
 - **kotlinx.serialization**: DTOs (data transfer objects) live in `data/` only — never expose serializable DTOs to `domain/`. Map to domain models in the repository implementation.
 
+## Known Platform Constraints
+
+### ViewModel scoping
+All ViewModels are scoped to the Activity via `koinViewModel()` — they are **never destroyed** between navigation sessions. When designing a feature that involves a repeatable flow (camera, form, etc.), flag this in Architect Notes and specify:
+- Which ViewModel needs a `Reset` intent (for accumulated state like photo lists)
+- Which navigation triggers must use `Channel<Unit>` instead of a boolean state flag
+
+### SQLDelight schema migrations
+SQLite (below 3.35) does not support `DROP COLUMN`. When a migration removes or renames a column, use the **create-insert-drop-rename pattern**:
+1. `CREATE TABLE new_table AS ...` with the new schema
+2. `INSERT INTO new_table SELECT ... FROM old_table`
+3. `DROP TABLE old_table`
+4. `ALTER TABLE new_table RENAME TO old_table`
+Place migration files in `commonMain/sqldelight/migrations/<version>.sqm` and bump `version` in `shared/build.gradle.kts`.
+
+### Offline-first location
+The local DB stores **coordinates only** (`latitude REAL`, `longitude REAL`) — never an address string. Address resolution is done on-demand at display time via reverse-geocoding and is never persisted. Connectivity is checked via the `NetworkStatus` expect/actual (`isNetworkAvailable(): Boolean`).
+
 ## Design Checklist
 
 Before handing off to the developer:

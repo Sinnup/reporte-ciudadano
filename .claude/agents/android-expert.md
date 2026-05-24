@@ -39,6 +39,39 @@ Android-only Kotlin code goes in `shared/src/androidMain/kotlin/`. The `:android
 ./gradlew :shared:testAndroidHostTest        # run Android unit tests on JVM
 ```
 
+### Location capture — race condition pattern
+
+GPS fixes are slow (cold start: 30–90 s). Never read `deviceLocation` synchronously in a camera callback — use a `Deferred` so the callback can await the fix with a timeout:
+
+```kotlin
+var locationDeferred by remember { mutableStateOf<Deferred<GeoLocation?>?>(null) }
+
+// In LaunchedEffect — start fetch before opening camera
+locationDeferred = async { getCurrentDeviceLocation(context) }
+launcher.launch(uri)
+
+// In the camera callback — await with timeout
+scope.launch {
+    val exif = readExifLocation(file.absolutePath)
+    val location = exif ?: withTimeoutOrNull(15_000L) { locationDeferred?.await() }
+    onPhotoTaken(CapturedPhoto(..., location))
+}
+```
+
+When registering for location updates (slow path), register **all enabled providers** at once — GPS and network race and whichever fires first wins. Do not use `providers.first()`:
+
+```kotlin
+val registered = providers.count { provider ->
+    runCatching {
+        lm.requestLocationUpdates(provider, 0L, 0f, listener, Looper.getMainLooper())
+    }.isSuccess
+}
+if (registered == 0) { continuation.resume(null); return@suspendCancellableCoroutine }
+continuation.invokeOnCancellation { runCatching { lm.removeUpdates(listener) } }
+```
+
+`removeUpdates(listener)` removes the listener from all providers at once — no need to call it per provider.
+
 ### ProGuard / R8
 - `isMinifyEnabled = false` currently. When enabling for release, add rules to `androidApp/proguard-rules.pro`.
 - Compose requires `-keep class androidx.compose.**` and related rules — use the official Compose ProGuard rules dependency.

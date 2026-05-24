@@ -69,6 +69,39 @@ class SubmitReportUseCaseTest {
 }
 ```
 
+## Testing Patterns Specific to This Codebase
+
+### One-shot Channel events
+When a ViewModel emits navigation via `Channel<Unit>`, collect from it in tests using `turbine` or a direct coroutine collect with `first()`:
+
+```kotlin
+val events = mutableListOf<Unit>()
+val job = launch { viewModel.submitted.toList(events) }
+viewModel.processIntent(ReportFormIntent.Submit)
+advanceUntilIdle()
+assertEquals(1, events.size)
+job.cancel()
+```
+
+### Injectable platform dependencies
+ViewModels that call platform functions (network, geocoding) accept them as constructor lambdas so tests can inject fakes without mocking frameworks:
+
+```kotlin
+// ViewModel constructor
+class ReportFormViewModel(
+    ...,
+    private val networkAvailable: () -> Boolean = { isNetworkAvailable() }
+)
+
+// Test
+val vm = ReportFormViewModel(..., networkAvailable = { false })
+```
+
+Always inject fakes this way — never call `isNetworkAvailable()` or similar platform functions directly in tests.
+
+### Session reset
+When testing a ViewModel that has a `Reset` intent, always fire it before each test case to guarantee a clean state, matching what the screen does in production.
+
 ## QA Checklist (per feature branch)
 
 - [ ] All new UseCases have tests in `commonTest`.
