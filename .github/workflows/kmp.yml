@@ -1,4 +1,4 @@
-name: Android CI
+name: KMP CI
 
 on:
   push:
@@ -6,21 +6,132 @@ on:
   pull_request:
     branches: [ "main" ]
 
+# Cancel in-flight runs for the same ref so a new push doesn't queue behind a stale one.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  build:
 
+  # ── Android ────────────────────────────────────────────────────────────────
+  compile-android:
+    name: Compile — Android
     runs-on: ubuntu-latest
-
     steps:
-    - uses: actions/checkout@v4
-    - name: set up JDK 11
-      uses: actions/setup-java@v4
-      with:
-        java-version: '11'
-        distribution: 'temurin'
-        cache: gradle
+      - uses: actions/checkout@v4
 
-    - name: Grant execute permission for gradlew
-      run: chmod +x gradlew
-    - name: Build with Gradle
-      run: ./gradlew assemble
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Compile Android (shared + app)
+        # :androidApp:compileDebugKotlin transitively compiles :shared:compileAndroidMain,
+        # so a single task covers both the library and the application module.
+        run: ./gradlew :androidApp:compileDebugKotlin
+
+  # ── iOS simulator ──────────────────────────────────────────────────────────
+  compile-ios:
+    name: Compile — iOS (iosSimulatorArm64)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Compile Kotlin/Native for iOS simulator
+        # Produces a klib for iosSimulatorArm64 — the lightest task that validates
+        # platform-specific iOS source without linking a full framework.
+        run: ./gradlew :shared:compileKotlinIosSimulatorArm64
+
+  # ── Web JS ─────────────────────────────────────────────────────────────────
+  compile-js:
+    name: Compile — Web JS
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Compile Kotlin/JS
+        run: ./gradlew :shared:compileKotlinJs
+
+  # ── Web WasmJS ─────────────────────────────────────────────────────────────
+  compile-wasmjs:
+    name: Compile — Web WasmJS
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Compile Kotlin/WasmJS
+        run: ./gradlew :shared:compileKotlinWasmJs
+
+  # ── JVM unit tests ─────────────────────────────────────────────────────────
+  test-jvm:
+    name: Test — Android Host (JVM)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Run unit tests (androidHostTest)
+        # Compiles and executes the shared commonTest + androidMain tests on the JVM.
+        # This is the only job that runs tests; all compile-* jobs do compilation only.
+        run: ./gradlew :shared:testAndroidHostTest
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-jvm
+          path: shared/build/test-results/
+
+  # ── Gate ───────────────────────────────────────────────────────────────────
+  all-green:
+    name: All checks passed
+    runs-on: ubuntu-latest
+    # Use this job as the single required status check in branch-protection rules.
+    # It only succeeds when every platform job above succeeds.
+    needs:
+      - compile-android
+      - compile-ios
+      - compile-js
+      - compile-wasmjs
+      - test-jvm
+    steps:
+      - run: echo "All platform compilation and test jobs passed."
