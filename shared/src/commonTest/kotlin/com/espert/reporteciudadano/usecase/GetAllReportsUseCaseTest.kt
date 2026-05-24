@@ -28,6 +28,6 @@ class GetAllReportsUseCaseTest {
     }
 
     private fun makeReport(id: String) = CitizenReport(
-        id, "T", "D", emptyList(), GeoLocation(0.0, 0.0), "", ReportStatus.SENT, 0L
+        id, "T", "D", emptyList(), GeoLocation(0.0, 0.0), ReportStatus.SENT, 0L
     )
 }

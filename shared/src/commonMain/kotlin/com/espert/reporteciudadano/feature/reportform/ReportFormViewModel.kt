@@ -7,34 +7,50 @@ import com.espert.reporteciudadano.domain.usecase.ReverseGeocodeUseCase
 import com.espert.reporteciudadano.domain.usecase.SaveReportUseCase
 import com.espert.reporteciudadano.navigation.CapturedPhoto
 import com.espert.reporteciudadano.platform.generateUuid
+import com.espert.reporteciudadano.platform.isNetworkAvailable
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
-import kotlinx.datetime.Clock
+import kotlin.time.Clock
 
 class ReportFormViewModel(
     private val saveReportUseCase: SaveReportUseCase,
-    private val reverseGeocodeUseCase: ReverseGeocodeUseCase
+    private val reverseGeocodeUseCase: ReverseGeocodeUseCase,
+    private val networkAvailable: () -> Boolean = { isNetworkAvailable() }
 ) : ViewModel() {
     private val _state = MutableStateFlow(ReportFormState())
     val state: StateFlow<ReportFormState> = _state.asStateFlow()
 
+    private val _submitted = Channel<Unit>(Channel.BUFFERED)
+    val submitted = _submitted.receiveAsFlow()
+
     private var photos: List<CapturedPhoto> = emptyList()
+    private var resolvedLocation: GeoLocation? = null
 
     fun init(capturedPhotos: List<CapturedPhoto>) {
+        _state.value = ReportFormState()
         photos = capturedPhotos
-        val location = capturedPhotos.firstOrNull()?.exifLocation
-        if (location != null) {
-            viewModelScope.launch {
+        val location = capturedPhotos.firstOrNull { it.exifLocation != null }?.exifLocation
+            ?: return
+        resolvedLocation = location
+        viewModelScope.launch {
+            if (networkAvailable()) {
                 val result = reverseGeocodeUseCase(location)
+                val display = result.fold(
+                    onSuccess = { address -> LocationDisplay.Address(address) },
+                    onFailure = { LocationDisplay.Coordinates(location.latitude, location.longitude) }
+                )
+                _state.update { it.copy(locationDisplay = display) }
+            } else {
                 _state.update {
                     it.copy(
-                        address = result.getOrElse { "Location unavailable" },
-                        isLoadingAddress = false
+                        locationDisplay = LocationDisplay.Coordinates(
+                            location.latitude,
+                            location.longitude
+                        )
                     )
                 }
             }
-        } else {
-            _state.update { it.copy(address = "Location unavailable", isLoadingAddress = false) }
         }
     }
 
@@ -50,21 +66,21 @@ class ReportFormViewModel(
     private fun submit() {
         val s = _state.value
         if (!s.canSubmit) return
+        val location = resolvedLocation ?: return
         _state.update { it.copy(isSubmitting = true) }
         viewModelScope.launch {
-            val location = photos.firstOrNull()?.exifLocation ?: GeoLocation(0.0, 0.0)
             val report = CitizenReport(
                 id = generateUuid(),
                 title = s.title,
                 description = s.description,
                 photos = photos.map { ReportPhoto(it.id, it.localPath, it.exifLocation) },
                 location = location,
-                address = s.address,
                 status = ReportStatus.SENT,
                 createdAt = Clock.System.now().toEpochMilliseconds()
             )
             saveReportUseCase(report)
-            _state.update { it.copy(isSubmitting = false, submitted = true) }
+            _state.update { it.copy(isSubmitting = false) }
+            _submitted.send(Unit)
         }
     }
 }

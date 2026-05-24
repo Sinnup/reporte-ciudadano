@@ -2,6 +2,7 @@ package com.espert.reporteciudadano.feature.shell
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -32,7 +33,7 @@ fun MainScreen(
                 NavigationBarItem(
                     selected = selectedTab == BottomTab.MY_REPORTS,
                     onClick = { onTabSelected(BottomTab.MY_REPORTS) },
-                    icon = { Icon(Icons.Default.List, contentDescription = stringResource(Res.string.tab_my_reports)) },
+                    icon = { Icon(Icons.AutoMirrored.Filled.List, contentDescription = stringResource(Res.string.tab_my_reports)) },
                     label = { Text(stringResource(Res.string.tab_my_reports)) }
                 )
                 NavigationBarItem(

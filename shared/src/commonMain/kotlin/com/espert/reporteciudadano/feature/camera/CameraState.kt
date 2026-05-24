@@ -7,7 +7,8 @@ data class CameraState(
     val showOptions: Boolean = false,
     val locationDenied: Boolean = false,
     val cameraDenied: Boolean = false,
-    val locationDisabled: Boolean = false
+    val locationDisabled: Boolean = false,
+    val noLocationOnPhotos: Boolean = false
 ) {
     val isFull: Boolean get() = photos.size >= 4
 }

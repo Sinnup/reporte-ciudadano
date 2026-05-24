@@ -36,7 +36,6 @@ class SaveReportUseCaseTest {
         description = "Very deep pothole on Main St",
         photos = emptyList(),
         location = GeoLocation(19.4, -99.1),
-        address = "Main St, City",
         status = ReportStatus.SENT,
         createdAt = 1000L
     )

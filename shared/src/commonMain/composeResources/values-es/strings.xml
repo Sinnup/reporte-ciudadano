@@ -21,7 +21,7 @@
     <string name="photo_content_description">Foto</string>
     <string name="new_report_title">Nuevo reporte</string>
     <string name="address_dialog_title">Sobre la dirección</string>
-    <string name="address_dialog_body">La dirección mostrada puede ser aproximada según las coordenadas GPS de la foto.</string>
+    <string name="address_dialog_body">La ubicación mostrada puede ser una dirección aproximada obtenida de las coordenadas GPS de tu foto, o las coordenadas sin procesar si no hay conexión a internet.</string>
     <string name="got_it_button">Entendido</string>
     <string name="title_field_label">Título *</string>
     <string name="description_field_label">Descripción *</string>
@@ -44,4 +44,7 @@
     <string name="location_service_disabled_title">Servicio de ubicación desactivado</string>
     <string name="location_service_disabled_body">Los servicios de ubicación están desactivados en tu dispositivo. Por favor, actívalos en Configuración para continuar.</string>
     <string name="go_to_settings_button">Ir a Configuración</string>
+    <string name="no_location_on_photos_body">Ninguna de tus fotos tiene coordenadas GPS. Vuelve a tomar las fotos con los servicios de ubicación activados.</string>
+    <string name="location_loading">Resolviendo ubicación...</string>
+    <string name="location_offline_label">Ubicación (sin conexión)</string>
 </resources>

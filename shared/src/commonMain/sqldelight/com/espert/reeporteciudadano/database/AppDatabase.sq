@@ -4,7 +4,6 @@ CREATE TABLE ReportEntity (
     description TEXT NOT NULL,
     latitude REAL NOT NULL,
     longitude REAL NOT NULL,
-    address TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'SENT',
     created_at INTEGER NOT NULL
 );
@@ -25,7 +24,7 @@ getReportById:
 SELECT * FROM ReportEntity WHERE id = ?;
 
 insertReport:
-INSERT OR REPLACE INTO ReportEntity VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+INSERT OR REPLACE INTO ReportEntity VALUES (?, ?, ?, ?, ?, ?, ?);
 
 getPhotosForReport:
 SELECT * FROM ReportPhotoEntity WHERE report_id = ? ORDER BY rowid ASC;

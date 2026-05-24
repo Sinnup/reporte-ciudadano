@@ -6,7 +6,6 @@ data class CitizenReport(
     val description: String,
     val photos: List<ReportPhoto>,
     val location: GeoLocation,
-    val address: String,
     val status: ReportStatus,
     val createdAt: Long
 )

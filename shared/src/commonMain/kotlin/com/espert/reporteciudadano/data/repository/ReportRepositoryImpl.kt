@@ -15,7 +15,6 @@ class ReportRepositoryImpl(private val db: AppDatabase) : ReportRepository {
                 description = report.description,
                 latitude = report.location.latitude,
                 longitude = report.location.longitude,
-                address = report.address,
                 status = report.status.name,
                 created_at = report.createdAt
             )
@@ -50,7 +49,6 @@ class ReportRepositoryImpl(private val db: AppDatabase) : ReportRepository {
                     description = entity.description,
                     photos = photos,
                     location = GeoLocation(entity.latitude, entity.longitude),
-                    address = entity.address,
                     status = ReportStatus.valueOf(entity.status),
                     createdAt = entity.created_at
                 )
@@ -77,7 +75,6 @@ class ReportRepositoryImpl(private val db: AppDatabase) : ReportRepository {
                 description = entity.description,
                 photos = photos,
                 location = GeoLocation(entity.latitude, entity.longitude),
-                address = entity.address,
                 status = ReportStatus.valueOf(entity.status),
                 createdAt = entity.created_at
             )

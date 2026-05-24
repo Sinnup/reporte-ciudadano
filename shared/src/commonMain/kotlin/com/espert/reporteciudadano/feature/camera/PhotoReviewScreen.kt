@@ -5,6 +5,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.GpsOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -21,7 +22,9 @@ import reporteciudadano.shared.generated.resources.*
 @Composable
 fun PhotoReviewScreen(
     photos: List<CapturedPhoto>,
+    noLocationOnPhotos: Boolean,
     onContinue: () -> Unit,
+    onIntent: (CameraIntent) -> Unit,
     onCancel: () -> Unit
 ) {
     Scaffold(
@@ -34,8 +37,16 @@ fun PhotoReviewScreen(
         bottomBar = {
             Box(Modifier.fillMaxWidth().padding(16.dp)) {
                 Button(
-                    onClick = onContinue,
-                    enabled = photos.isNotEmpty(),
+                    onClick = {
+                        val hasLocation = photos.any { it.exifLocation != null }
+                        if (!hasLocation) {
+                            onIntent(CameraIntent.NoLocationOnPhotos)
+                        } else {
+                            onIntent(CameraIntent.LocationOnPhotosClear)
+                            onContinue()
+                        }
+                    },
+                    enabled = photos.isNotEmpty() && !noLocationOnPhotos,
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(stringResource(Res.string.continue_button))
@@ -62,6 +73,27 @@ fun PhotoReviewScreen(
                                 modifier = Modifier.size(160.dp)
                             )
                         }
+                    }
+                }
+                if (noLocationOnPhotos) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.GpsOff,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Text(
+                            text = stringResource(Res.string.no_location_on_photos_body),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error
+                        )
                     }
                 }
             }

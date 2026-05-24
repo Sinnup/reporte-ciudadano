@@ -13,8 +13,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.FileProvider
 import com.espert.reporteciudadano.domain.model.GeoLocation
 import com.espert.reporteciudadano.navigation.CapturedPhoto
+import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
 import java.util.UUID
 import kotlin.coroutines.resume
@@ -22,23 +25,27 @@ import kotlin.coroutines.resume
 @Composable
 actual fun CameraCapture(onPhotoTaken: (CapturedPhoto) -> Unit, onCancel: () -> Unit) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     var photoFile by remember { mutableStateOf<File?>(null) }
-    var deviceLocation by remember { mutableStateOf<GeoLocation?>(null) }
+    // Deferred so the camera callback can await the GPS fix if it hasn't arrived yet
+    var locationDeferred by remember { mutableStateOf<Deferred<GeoLocation?>?>(null) }
 
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { success ->
         if (success) {
             val file = photoFile ?: return@rememberLauncherForActivityResult
-            val location = readExifLocation(file.absolutePath) ?: deviceLocation
-            onPhotoTaken(CapturedPhoto(UUID.randomUUID().toString(), file.absolutePath, location))
+            scope.launch {
+                val exifLocation = readExifLocation(file.absolutePath)
+                // Prefer EXIF; otherwise wait up to 15 s for the device-location coroutine
+                val location = exifLocation ?: withTimeoutOrNull(15_000L) { locationDeferred?.await() }
+                onPhotoTaken(CapturedPhoto(UUID.randomUUID().toString(), file.absolutePath, location))
+            }
         } else {
             onCancel()
         }
     }
 
     LaunchedEffect(Unit) {
-        // Fetch device location in parallel while the user takes the photo
-        launch { deviceLocation = getCurrentDeviceLocation(context) }
-
+        locationDeferred = async { getCurrentDeviceLocation(context) }
         val file = createImageFile(context)
         photoFile = file
         val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
@@ -77,13 +84,16 @@ private suspend fun getCurrentDeviceLocation(context: Context): GeoLocation? =
             return@suspendCancellableCoroutine
         }
 
-        // Slow path: register for the first available fix (network provider is fastest)
+        // Slow path: register all enabled providers so GPS and network race — first fix wins
         val listener = LocationListener { loc ->
             if (continuation.isActive) continuation.resume(GeoLocation(loc.latitude, loc.longitude))
         }
-        runCatching {
-            lm.requestLocationUpdates(providers.first(), 0L, 0f, listener, Looper.getMainLooper())
-        }.onFailure {
+        val registered = providers.count { provider ->
+            runCatching {
+                lm.requestLocationUpdates(provider, 0L, 0f, listener, Looper.getMainLooper())
+            }.isSuccess
+        }
+        if (registered == 0) {
             continuation.resume(null)
             return@suspendCancellableCoroutine
         }

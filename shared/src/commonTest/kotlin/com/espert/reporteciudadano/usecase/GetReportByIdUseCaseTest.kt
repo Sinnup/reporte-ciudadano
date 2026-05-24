@@ -14,7 +14,7 @@ class GetReportByIdUseCaseTest {
 
     @Test
     fun `returns the correct report by id`() = runTest {
-        val report = CitizenReport("abc", "Title", "Desc", emptyList(), GeoLocation(0.0, 0.0), "", ReportStatus.SENT, 0L)
+        val report = CitizenReport("abc", "Title", "Desc", emptyList(), GeoLocation(0.0, 0.0), ReportStatus.SENT, 0L)
         repository.saved.add(report)
         val result = useCase("abc")
         assertTrue(result.isSuccess)

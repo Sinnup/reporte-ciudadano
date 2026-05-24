@@ -29,6 +29,7 @@ fun CameraScreen(
     onCancel: () -> Unit,
     viewModel: CameraViewModel = koinViewModel()
 ) {
+    LaunchedEffect(Unit) { viewModel.processIntent(CameraIntent.Reset) }
     val state by viewModel.state.collectAsState()
     var locationChecked by remember { mutableStateOf(false) }
     var cameraChecked by remember { mutableStateOf(false) }

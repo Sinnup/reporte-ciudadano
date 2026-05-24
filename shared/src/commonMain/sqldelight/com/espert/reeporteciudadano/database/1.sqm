@@ -1,0 +1,22 @@
+-- Migration from schema version 1 to 2
+-- Removes the address column from ReportEntity.
+-- SQLite does not support DROP COLUMN on older versions, so use the
+-- create-copy-drop-rename pattern.
+
+CREATE TABLE ReportEntity_new (
+    id          TEXT    NOT NULL PRIMARY KEY,
+    title       TEXT    NOT NULL,
+    description TEXT    NOT NULL,
+    latitude    REAL    NOT NULL,
+    longitude   REAL    NOT NULL,
+    status      TEXT    NOT NULL DEFAULT 'SENT',
+    created_at  INTEGER NOT NULL
+);
+
+INSERT INTO ReportEntity_new (id, title, description, latitude, longitude, status, created_at)
+    SELECT id, title, description, latitude, longitude, status, created_at
+    FROM ReportEntity;
+
+DROP TABLE ReportEntity;
+
+ALTER TABLE ReportEntity_new RENAME TO ReportEntity;

@@ -7,15 +7,14 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.espert.reporteciudadano.navigation.CapturedPhoto
+import com.espert.reporteciudadano.ui.components.LocationDisplayCard
 import org.jetbrains.compose.resources.stringResource
 import reporteciudadano.shared.generated.resources.Res
 import reporteciudadano.shared.generated.resources.*
@@ -32,7 +31,7 @@ fun ReportFormScreen(
     val state by viewModel.state.collectAsState()
 
     LaunchedEffect(photos) { viewModel.init(photos) }
-    LaunchedEffect(state.submitted) { if (state.submitted) onSubmitted() }
+    LaunchedEffect(Unit) { viewModel.submitted.collect { onSubmitted() } }
 
     if (state.showDisclaimer) {
         AlertDialog(
@@ -101,17 +100,10 @@ fun ReportFormScreen(
                     minLines = 3,
                     modifier = Modifier.fillMaxWidth()
                 )
-                ElevatedCard(Modifier.fillMaxWidth()) {
-                    Row(
-                        Modifier.padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Icon(Icons.Default.LocationOn, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                        if (state.isLoadingAddress) CircularProgressIndicator(Modifier.size(20.dp))
-                        else Text(state.address, style = MaterialTheme.typography.bodyMedium)
-                    }
-                }
+                LocationDisplayCard(
+                    locationDisplay = state.locationDisplay,
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
             Spacer(Modifier.height(8.dp))
         }

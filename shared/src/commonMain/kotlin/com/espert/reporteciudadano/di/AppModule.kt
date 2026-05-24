@@ -41,6 +41,6 @@ fun appModule(driverFactory: DatabaseDriverFactory) = module {
     viewModelOf(::CameraViewModel)
     viewModel { ReportFormViewModel(get(), get()) }
     viewModelOf(::MyReportsViewModel)
-    viewModel { (reportId: String) -> ReportDetailViewModel(reportId, get()) }
+    viewModel { (reportId: String) -> ReportDetailViewModel(reportId, get(), get()) }
     viewModelOf(::ReportsMapViewModel)
 }

@@ -5,6 +5,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import com.espert.reporteciudadano.platform.MapView
 import org.jetbrains.compose.resources.stringResource
 import reporteciudadano.shared.generated.resources.Res
@@ -27,8 +28,12 @@ fun ReportsMapScreen(
         }
         CenterAlignedTopAppBar(
             title = { Text(stringResource(Res.string.reports_map_title)) },
-            colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-                containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f)
+            colors = TopAppBarDefaults.topAppBarColors(
+                containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
+                scrolledContainerColor = Color.Unspecified,
+                navigationIconContentColor = Color.Unspecified,
+                titleContentColor = Color.Unspecified,
+                actionIconContentColor = Color.Unspecified
             )
         )
     }

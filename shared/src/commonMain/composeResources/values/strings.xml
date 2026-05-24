@@ -21,7 +21,7 @@
     <string name="photo_content_description">Photo</string>
     <string name="new_report_title">New Report</string>
     <string name="address_dialog_title">About the address</string>
-    <string name="address_dialog_body">The address shown may be approximate based on the photo\'s GPS coordinates.</string>
+    <string name="address_dialog_body">The location shown may be an approximate address resolved from your photo\'s GPS coordinates, or the raw coordinates if network is unavailable.</string>
     <string name="got_it_button">Got it</string>
     <string name="title_field_label">Title *</string>
     <string name="description_field_label">Description *</string>
@@ -44,4 +44,7 @@
     <string name="location_service_disabled_title">Location Service Off</string>
     <string name="location_service_disabled_body">Location services are turned off on your device. Please enable them in Settings to continue.</string>
     <string name="go_to_settings_button">Go to Settings</string>
+    <string name="no_location_on_photos_body">None of your photos have GPS coordinates. Please retake photos with location services enabled.</string>
+    <string name="location_loading">Resolving location...</string>
+    <string name="location_offline_label">Location (offline)</string>
 </resources>
