@@ -74,6 +74,7 @@ Specialized agents live in `.claude/agents/`. Use them for their designated conc
 | `web-expert` | JS/Wasm browser platform specifics |
 | `ux-ui-designer` | UI/UX design proposals per feature |
 | `business-analyst` | User story authoring and requirements |
+| `migration-expert` | Dependency upgrades, version catalog management, breaking-change analysis across all KMP targets |
 
 ## Standard Feature Flow
 
