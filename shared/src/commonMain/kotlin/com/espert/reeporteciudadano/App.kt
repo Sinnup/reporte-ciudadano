@@ -1,11 +1,10 @@
 package com.espert.reeporteciudadano
 
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import com.espert.reeporteciudadano.feature.camera.CameraScreen
@@ -19,8 +18,8 @@ import org.koin.compose.viewmodel.koinViewModel
 
 @Composable
 fun App() {
-    MaterialTheme {
-        Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
+    AppTheme {
+        Surface(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
             val appViewModel: AppViewModel = koinViewModel()
             val destination by appViewModel.currentDestination.collectAsState()
             val selectedTab by appViewModel.selectedTab.collectAsState()
