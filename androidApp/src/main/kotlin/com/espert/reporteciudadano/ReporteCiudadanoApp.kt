@@ -1,6 +1,9 @@
 package com.espert.reporteciudadano
 
 import android.app.Application
+import com.espert.reporteciudadano.cloudsync.di.cloudSyncModule
+import com.espert.reporteciudadano.cloudsync.notification.NotificationChannelSetup
+import com.espert.reporteciudadano.cloudsync.platform.SyncScheduler
 import com.espert.reporteciudadano.di.appModule
 import com.espert.reporteciudadano.platform.DatabaseDriverFactory
 import org.koin.android.ext.koin.androidContext
@@ -11,7 +14,12 @@ class ReporteCiudadanoApp : Application() {
         super.onCreate()
         startKoin {
             androidContext(this@ReporteCiudadanoApp)
-            modules(appModule(DatabaseDriverFactory(this@ReporteCiudadanoApp)))
+            modules(
+                appModule(DatabaseDriverFactory(this@ReporteCiudadanoApp)),
+                cloudSyncModule
+            )
         }
+        NotificationChannelSetup.createSyncFailuresChannel(this)
+        SyncScheduler.scheduleBackgroundSync()
     }
 }

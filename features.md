@@ -1004,6 +1004,388 @@ This feature has no screen or UI component. The "design" deliverable is the exac
 
 ---
 
+### [FEAT-013] Cloud Sync — DynamoDB + S3
+
+**Status**: `Done`
+
+**Architect Notes**
+
+FEAT-013 adds reliable, offline-tolerant cloud synchronisation of all citizen reports and their associated photos to AWS infrastructure. Every `CitizenReport` row is uploaded to a DynamoDB table and every photo file (stored as a local path in `ReportPhotoEntity`) is uploaded to an S3 bucket. The sync pipeline runs entirely in the background; the user is only aware of it when a failure notification appears after five consecutive failed attempts.
+
+**Module structure.** A new Gradle submodule `:feature:cloudsync` is introduced as an Android Library. All sync domain types (`SyncStatus`, `SyncRecord`, `CloudSyncRepository`, and five use cases) live in its `commonMain`. Platform-specific scheduler and notification code lives in the respective source sets. `:feature:cloudsync` depends on `:shared` for domain models but on no other feature module, keeping the dependency graph acyclic. `:androidApp` gains a single `implementation(projects.feature.cloudsync)` dependency. One new version-catalog entry is needed: `androidx.work:work-runtime-ktx` (WorkManager, latest stable).
+
+**Domain and persistence.** Two new columns are appended to `ReportEntity` in a new SQLDelight migration file `2.sqm` (two `ALTER TABLE ADD COLUMN` statements — safe for SQLite, no table-rename cycle needed). This increments `schemaVersion` to 3. The new columns are `synced_at INTEGER` (nullable, set on first successful upload) and `sync_failure_count INTEGER NOT NULL DEFAULT 0`. A new `SyncRecord` domain model wraps these fields. `CitizenReport` itself is unchanged. The sync state is a separate operational concern; the existing presentation layer requires no changes.
+
+**AWS integration and credentials.** `aws-sdk-kotlin` does not publish KMP artifacts for iOS, JS, or WasmJS targets as of mid-2025. All DynamoDB and S3 calls are therefore implemented as raw Ktor HTTP requests with AWS Signature Version 4 signing. SigV4 HMAC-SHA256 requires a platform `expect fun hmacSha256(key: ByteArray, data: ByteArray): ByteArray` with actuals using `javax.crypto` (Android), `CommonCrypto` (iOS), and `SubtleCrypto` (JS/WasmJS). AWS credentials (Access Key ID, Secret Access Key, region, table name, bucket name) are read from a gitignored `aws.properties` file in the project root via a `loadAwsCredentials()` expect/actual: Android reads from `assets/`, iOS from `Bundle.main`, and JS/WasmJS from a compile-time-generated Kotlin object populated by a Gradle `processResources` task. The exact file format is documented in `architecture.md` under FEAT-013.
+
+**Background sync and failure handling.** Three platform strategies are used behind a `SyncScheduler` expect/actual. Android uses `CloudSyncWorker : CoroutineWorker` with `NetworkType.CONNECTED` constraint, exponential backoff, `setExpedited` for the eager post-save enqueue, and a `PeriodicWorkRequest` every 15 minutes as a catch-all. iOS uses `BGProcessingTaskRequest` via `BGTaskScheduler` (requires network, registered in the app entry point) plus a foreground fallback that runs on app resume when online. JS/WasmJS attaches a `window.addEventListener("online", ...)` handler that triggers sync immediately; WasmJS sync is a documented no-op because no Ktor WasmJS engine is available. When `syncFailureCount` reaches 5, a `SyncFailureNotifier` expect/actual fires a device notification: Android dispatches via `NotificationManager` (channel `sync_failures`) with a `PendingIntent` to `SyncRetryReceiver` (a `BroadcastReceiver` that calls `RetryFailedSyncsUseCase` and re-enqueues the Worker); iOS uses `UNUserNotificationCenter` with a custom `"RETRY_SYNC"` action; Web posts to a `SharedFlow<SyncFailureEvent>` that surfaces as a Snackbar in the root composable.
+
+**Idempotency.** DynamoDB writes use a `PutItem` with condition expression `attribute_not_exists(id)` on first upload and `UpdateItem` for subsequent status changes; a `ConditionalCheckFailedException` is treated as success. S3 uploads issue a `HeadObject` before each `PutObject` and skip the upload if the object already exists. S3 key format is `reports/<reportId>/<filename>`. The full technical detail — migration SQL, file map, Koin module, DynamoDB table schema, and design checklist — is recorded in `architecture.md` under FEAT-013.
+
+**User Story** *(Business Analyst)*
+> As a citizen,
+> I want my submitted pothole reports and their photos to be automatically uploaded to the city's cloud infrastructure in the background,
+> So that officials always receive my reports with full detail even if my device was offline at the time of submission, and I am notified if the upload repeatedly fails so I know my report may not have been delivered.
+
+**Acceptance Criteria**
+
+**Background sync triggers**
+
+- [ ] Given a report is saved successfully via `SaveReportUseCase`, when the save completes, then a background sync job is enqueued immediately (Android: expedited `OneTimeWorkRequest` with `CONNECTED` constraint; iOS: `BGProcessingTaskRequest`; Web JS: sync runs in-foreground if `navigator.onLine` is true).
+- [ ] Given the app is brought to the foreground and there are reports with `SyncStatus.PENDING` or `SyncStatus.FAILED` (with `syncFailureCount < 5`) in the database, when the app resumes, then a sync job is triggered (Android: `OneTimeWorkRequest` enqueued via `ProcessLifecycleOwner.ON_START`; iOS: foreground coroutine launched on app resume; Web JS: `window.addEventListener("online", ...)` handler fires if online).
+- [ ] Given the Android platform, when the app is running, then a periodic background `PeriodicWorkRequest` with a 15-minute minimum interval is registered at app startup as a catch-all for reports that missed the eager sync trigger.
+
+**Success path**
+
+- [ ] Given a report has `SyncStatus.PENDING` and the device has network connectivity, when `SyncReportUseCase` runs to completion, then the report's metadata (`id`, `title`, `description`, `latitude`, `longitude`, `status`, `createdAt`) is present as an item in the DynamoDB table and `ReportEntity.synced_at` is set to the current epoch millis and `ReportEntity.sync_failure_count` is reset to 0.
+- [ ] Given a report has at least one associated photo with a valid `localPath`, when `SyncReportUseCase` runs to completion, then each photo file is present in the S3 bucket at key `reports/<reportId>/<localFilename>` and the DynamoDB item's `photoPaths` attribute contains all uploaded S3 keys.
+
+**Failure path and device notification**
+
+- [ ] Given a sync attempt for a report fails (network error or AWS error response), when `RecordSyncFailureUseCase` is called, then `ReportEntity.sync_failure_count` is incremented by 1 for that report and the report remains eligible for retry on the next sync cycle.
+- [ ] Given a report's `syncFailureCount` reaches exactly 5 on a failed attempt, when `RecordSyncFailureUseCase` signals the threshold, then a device notification is dispatched with the title "Sync failed" and body text `"Report \"<title>\" could not be uploaded after 5 attempts. Tap to retry."` (Android: via `NotificationManager` on channel `sync_failures`; iOS: via `UNUserNotificationCenter`; Web JS: via an in-app Snackbar message).
+- [ ] Given the device notification for a failing report is shown, when the citizen taps it (Android: taps the notification; iOS: taps the "Retry" action), then `RetryFailedSyncsUseCase` is called, the report's `sync_failure_count` is reset to 0, and a new sync cycle of up to 5 attempts begins (Android: `SyncRetryReceiver` re-enqueues a `OneTimeWorkRequest`; iOS: notification action handler calls `SyncScheduler.scheduleBackgroundSync()`).
+
+**Idempotency**
+
+- [ ] Given a report has already been successfully uploaded to DynamoDB, when `SyncReportUseCase` runs again for the same report (e.g., due to a duplicate enqueue), then the DynamoDB `PutItem` uses condition expression `attribute_not_exists(id)` and a `ConditionalCheckFailedException` response is treated as success — no duplicate item is created and `synced_at` is not overwritten.
+- [ ] Given a photo file has already been uploaded to S3 at key `reports/<reportId>/<filename>`, when `SyncPhotoUseCase` runs again for the same photo, then a `HeadObject` request confirms the object exists (HTTP 200) and the `PutObject` call is skipped — no duplicate upload occurs and no error is raised.
+
+**Credentials — never embedded in the binary**
+
+- [ ] Given the app is built without an `aws.properties` file in the appropriate platform asset location, when a sync job runs, then the job returns a failure result immediately rather than crashing; the credentials are never hardcoded as string literals in any Kotlin source file or resource file.
+- [ ] Given a valid `aws.properties` file is present (Android: `assets/aws.properties`; iOS: bundle resource; Web JS/WasmJS: compile-time-generated `AwsConfig` object), when `loadAwsCredentials()` is called, then it returns an `AwsCredentials` instance populated with the values from that file at runtime, without the credentials appearing in the compiled app binary.
+
+**Offline resilience**
+
+- [ ] Given the device has no network connectivity when a report is saved, when the sync scheduler checks constraints (Android: `NetworkType.CONNECTED`; iOS/Web: `isNetworkAvailable()`), then the sync job is deferred and the report remains in `SyncStatus.PENDING` with `syncFailureCount = 0` — no failure is recorded for a connectivity-gated deferral.
+- [ ] Given a report is in `SyncStatus.PENDING` and the device regains network connectivity, when the sync scheduler next runs (triggered by the online event, app foreground, or periodic job), then the report is picked up and a sync attempt is made without requiring any user action.
+
+**Per-platform scheduler behavior**
+
+- [ ] Given the Android platform, when `CloudSyncWorker.doWork()` executes, then it calls `GetPendingSyncsUseCase`, iterates each result calling `SyncReportUseCase`, records failures via `RecordSyncFailureUseCase`, and returns `Result.success()` for normal execution (including individual report failures tracked in the DB); it returns `Result.retry()` only on a total infrastructure failure (Ktor engine unavailable, database inaccessible).
+- [ ] Given the iOS platform, when the app enters the background, then `BGProcessingTaskRequest` with identifier `com.espert.reporteciudadano.cloudsync` and `requiresNetworkConnectivity = true` is submitted to `BGTaskScheduler`; when the OS invokes the task, the sync handler calls `GetPendingSyncsUseCase` and processes each pending report, calling `task.setTaskCompleted(success:)` before the system time limit.
+- [ ] Given the WasmJS platform, when a sync is triggered, then `CloudSyncRepository` returns `Result.failure(UnsupportedOperationException(...))` immediately — no network calls are made — because no Ktor WasmJS engine is available; this limitation is treated as a graceful no-op, not a failure that increments `syncFailureCount`.
+
+**Database schema migration**
+
+- [ ] Given an existing device with reports stored under schema version 2 (no sync columns), when the app is launched after upgrading to the FEAT-013 build, then migration `2.sqm` runs automatically, adding `synced_at INTEGER` (nullable) and `sync_failure_count INTEGER NOT NULL DEFAULT 0` to all existing `ReportEntity` rows without data loss.
+- [ ] After migration, all pre-existing reports have `synced_at = NULL` and `sync_failure_count = 0`, making them eligible for their first sync on the next background sync cycle.
+- [ ] The SQLDelight `schemaVersion` in `shared/build.gradle.kts` is 3 after this feature ships; attempting to open a schema-version-2 database without the migration present causes a detectable error rather than silent data corruption.
+
+**No regression to existing features**
+
+- [ ] Given FEAT-013 is installed, when the citizen opens the My Reports list, then all previously submitted reports are visible with their correct titles and status badges, with no missing or duplicated entries.
+- [ ] Given FEAT-013 is installed, when the citizen opens the Report Detail screen for any report, then all fields (photos, title, description, location, status) display correctly; the location display (`LocationDisplayCard`) continues to resolve via the FEAT-011 online/offline path.
+- [ ] Given FEAT-013 is installed, when the citizen opens the Reports Map, then all report pins are present at their correct coordinates and tapping a pin navigates to the correct Report Detail screen.
+- [ ] The addition of `synced_at` and `sync_failure_count` columns to `ReportEntity` does not cause any query in `ReportRepositoryImpl` (`getAll`, `getById`, `insertReport`) to fail or return incorrect data.
+
+**UX/UI Proposal** *(Designer — approved)*
+
+### Overview
+
+FEAT-013 introduces no new screens and no new navigation routes. All visual changes are additive to existing surfaces in `MyReportsScreen`. The design scope covers four deliverables: (1) a `SyncStatusIcon` composable added to each `ElevatedCard` row in the My Reports list; (2) device notification copy and channel description for Android; (3) an in-app Snackbar spec for the Web platform; and (4) the complete set of new string resource keys with English and Spanish values. The sync pipeline itself is invisible to the citizen — they see only the sync state summary on each report card and, if things go wrong repeatedly, a notification or Snackbar prompting a retry.
+
+---
+
+### 1. Sync Status Indicator — `SyncStatusIcon` composable
+
+#### Purpose
+
+Give citizens a quick, at-a-glance signal about whether each report has reached the cloud, is still waiting, or has encountered repeated upload failures. The indicator is passive — citizens do not interact with it — and must not crowd the existing `StatusChip` that shows the civic lifecycle status (`SENT`, `SEEN`, `IN_PROGRESS`, etc.).
+
+#### Placement within the `ElevatedCard` row
+
+The current card row layout (from FEAT-005) is:
+
+```
+Row(modifier, verticalAlignment = CenterVertically)
+  Text(report.title, weight = 1f)          ← fills remaining space
+  StatusChip(report.status)
+```
+
+The `SyncStatusIcon` is inserted as a third child between the title and the `StatusChip`, with `8.dp` end padding separating it from the chip. Using `weight = 1f` on the title ensures it still fills all remaining space and the two right-side elements simply wrap to their intrinsic sizes.
+
+```
+Row(modifier, verticalAlignment = CenterVertically)
+  Text(report.title, weight = 1f)
+  SyncStatusIcon(syncStatus, modifier = Modifier.padding(end = 8.dp))
+  StatusChip(report.status)
+```
+
+The icon is 18dp × 18dp — large enough to tap-locate at a glance but smaller than the `StatusChip` text label so it reads as secondary information.
+
+#### Icon and color decisions per state
+
+| State | Icon | Rationale | Color token |
+|---|---|---|---|
+| `SyncStatus.SYNCED` | `Icons.Default.CloudDone` | Universally recognised "cloud upload confirmed" shape; the checkmark inside removes ambiguity vs `CloudUpload` which could be read as "in progress" | `MaterialTheme.colorScheme.primary` |
+| `SyncStatus.PENDING` or `SyncStatus.IN_PROGRESS` | `Icons.Default.CloudUpload` | Conveys active or queued intent to upload; the upward arrow signals action without implying failure | `MaterialTheme.colorScheme.onSurfaceVariant` |
+| `SyncStatus.FAILED` (count ≥ 1) | `Icons.Default.SyncProblem` | The `SyncProblem` icon (exclamation mark over sync arrows) is the standard Material "sync went wrong" metaphor and is distinct from `CloudOff` (which implies the service is unavailable system-wide) | `MaterialTheme.colorScheme.error` |
+
+`Icons.Default.CloudOff` was considered for the failed state but rejected: it implies the cloud service itself is unreachable, which is not necessarily true. The failure may be transient. `SyncProblem` correctly signals "a sync attempt was made but encountered an error."
+
+#### Composable signature
+
+```kotlin
+@Composable
+fun SyncStatusIcon(
+    syncStatus: SyncStatus,
+    modifier: Modifier = Modifier
+)
+```
+
+#### Rendering logic
+
+```kotlin
+val (icon, tint, contentDesc) = when (syncStatus) {
+    SyncStatus.SYNCED ->
+        Triple(Icons.Default.CloudDone,
+               MaterialTheme.colorScheme.primary,
+               stringResource(Res.string.sync_status_synced_cd))
+    SyncStatus.PENDING,
+    SyncStatus.IN_PROGRESS ->
+        Triple(Icons.Default.CloudUpload,
+               MaterialTheme.colorScheme.onSurfaceVariant,
+               stringResource(Res.string.sync_status_pending_cd))
+    SyncStatus.FAILED ->
+        Triple(Icons.Default.SyncProblem,
+               MaterialTheme.colorScheme.error,
+               stringResource(Res.string.sync_status_failed_cd))
+}
+
+Icon(
+    imageVector = icon,
+    contentDescription = contentDesc,
+    tint = tint,
+    modifier = modifier.size(18.dp)
+)
+```
+
+#### ASCII wireframes
+
+**Before (current card — no sync indicator):**
+
+```
+┌──────────────────────────────────────────┐
+│  Pothole on main avenue    [SENT chip]   │
+└──────────────────────────────────────────┘
+```
+
+**After — state: PENDING (cloud upload icon, muted):**
+
+```
+┌──────────────────────────────────────────┐
+│  Pothole on main avenue  [↑☁]  [SENT]   │
+│                          muted           │
+└──────────────────────────────────────────┘
+```
+
+**After — state: SYNCED (cloud done icon, primary green):**
+
+```
+┌──────────────────────────────────────────┐
+│  Pothole on main avenue  [✓☁]  [SEEN]   │
+│                          green           │
+└──────────────────────────────────────────┘
+```
+
+**After — state: FAILED (sync problem icon, error red):**
+
+```
+┌──────────────────────────────────────────┐
+│  Pothole on main avenue  [!↻]  [SENT]   │
+│                          red             │
+└──────────────────────────────────────────┘
+```
+
+**Full list view (three reports, mixed states):**
+
+```
+┌──────────────────────────────────────────┐  CenterAlignedTopAppBar
+│              My Reports                  │
+├──────────────────────────────────────────┤
+│                                          │
+│  ┌──────────────────────────────────┐   │  ElevatedCard
+│  │  Crack near bus stop  [✓☁] [SEEN] │   │  SYNCED
+│  └──────────────────────────────────┘   │
+│                                          │
+│  ┌──────────────────────────────────┐   │  ElevatedCard
+│  │  Pothole on main ave  [↑☁] [SENT] │   │  PENDING
+│  └──────────────────────────────────┘   │
+│                                          │
+│  ┌──────────────────────────────────┐   │  ElevatedCard
+│  │  Flooding in park     [!↻] [SENT] │   │  FAILED
+│  └──────────────────────────────────┘   │
+│                                          │
+└──────────────────────────────────────────┘
+  NavigationBar (Report | My Reports | Map)
+```
+
+#### `MyReportsState` change
+
+`MyReportsState` must be extended with a map of sync states so the screen can render each icon without coupling to the sync module directly:
+
+```kotlin
+val syncStates: Map<String, SyncStatus> = emptyMap()  // keyed by report.id
+```
+
+The `MyReportsViewModel` loads sync records via `GetPendingSyncsUseCase` (already defined in the domain layer) and resolves `SyncStatus` per report ID. All reports absent from the map are treated as `PENDING` (safe default, avoids null-check in the composable).
+
+---
+
+### 2. Failure Notification Copy (Android)
+
+#### Notification channel
+
+| Field | Value |
+|---|---|
+| Channel ID | `sync_failures` |
+| Channel name (shown in device settings) | `stringResource(Res.string.sync_notification_channel_name)` → "Sync Failures" |
+| Channel description (shown in device settings) | `stringResource(Res.string.sync_notification_channel_desc)` → "Alerts when a report could not be uploaded to the city server after repeated attempts." |
+| Importance | `IMPORTANCE_DEFAULT` (shows as a heads-up notification but does not interrupt with sound) |
+
+#### Notification content
+
+| Field | Value |
+|---|---|
+| Title | `stringResource(Res.string.sync_notification_title)` → "Sync failed" |
+| Body | `"Report \"<reportTitle>\" could not be uploaded after 5 attempts. Tap to retry."` — assembled at runtime in `SyncFailureNotifier.android.kt`; the format string key is `sync_notification_body` with placeholder `%1$s` for the title |
+| Action button label | `stringResource(Res.string.sync_notification_action_retry)` → "Retry Sync" |
+
+The action button label "Retry Sync" (not just "Retry") disambiguates the action in notification shade for citizens who may have multiple notification types. It is short enough to fit the notification action chip without truncation on any standard screen size.
+
+#### iOS notification action
+
+Same title and body copy. The `UNNotificationAction` title uses the same `sync_notification_action_retry` key value: "Retry Sync".
+
+---
+
+### 3. Web In-App Snackbar
+
+#### Trigger condition
+
+The Snackbar is shown when `SyncFailureNotifier` (Web actual) posts a `SyncFailureEvent` to the root composable's `SharedFlow`. This occurs when `RecordSyncFailureUseCase` signals that `syncFailureCount` has reached `MAX_CONSECUTIVE_FAILURES (= 5)` for a given report.
+
+#### Snackbar specification
+
+| Property | Value |
+|---|---|
+| Message | `"Sync failed for \"<reportTitle>\". Reopen the app when you are online to retry."` — format key `sync_snackbar_message` with placeholder `%1$s` for the title |
+| Action label | `stringResource(Res.string.sync_snackbar_action)` → "Retry Sync" |
+| Duration | `SnackbarDuration.Indefinite` — stays visible until the citizen dismisses it or taps the action; this reflects the severity (data may not have reached the city server) |
+| Dismissal | The citizen can swipe to dismiss (standard Material3 `Snackbar` behaviour) without retrying |
+| Retry action | `SnackbarResult.ActionPerformed` triggers a call to `RetryFailedSyncsUseCase` |
+
+The Web snackbar provides a "Retry Sync" action button (unlike the architect note's original spec which said "no retry action button") because the Web foreground sync path allows immediate retry when the user is online. Since the Web's sync scheduler re-fires on network reconnect, tapping "Retry Sync" simply calls `RetryFailedSyncsUseCase` and the next `window.addEventListener("online")` cycle picks up the reset-to-PENDING records.
+
+#### Root composable wiring (design intent, not implementation)
+
+```
+val snackbarHostState = remember { SnackbarHostState() }
+
+LaunchedEffect(Unit) {
+    syncFailureEvents.collect { event ->
+        val result = snackbarHostState.showSnackbar(
+            message  = formatSyncFailureMessage(event.reportTitle),
+            actionLabel = retryLabel,
+            duration = SnackbarDuration.Indefinite
+        )
+        if (result == SnackbarResult.ActionPerformed) {
+            retrySyncUseCase(event.reportId)
+        }
+    }
+}
+
+Scaffold(
+    snackbarHost = { SnackbarHost(snackbarHostState) }
+) { ... }
+```
+
+#### ASCII wireframe (Web, wide screen, rail navigation)
+
+```
+┌────────────────────────────────────────────────────────┐
+│ [Report] [My Reports] [Map]        (NavigationRail)    │
+│                                                        │
+│  My Reports                                            │
+│  ┌──────────────────────────────────────────────────┐  │
+│  │  Crack near bus stop          [✓☁]  [SEEN]       │  │
+│  └──────────────────────────────────────────────────┘  │
+│  ┌──────────────────────────────────────────────────┐  │
+│  │  Pothole on main ave          [!↻]  [SENT]       │  │
+│  └──────────────────────────────────────────────────┘  │
+│                                                        │
+│ ┌──────────────────────────────────────────────────┐   │
+│ │ Sync failed for "Pothole on main ave". Reopen…   │   │  ← Snackbar, Indefinite
+│ │                              [Retry Sync]        │   │
+│ └──────────────────────────────────────────────────┘   │
+└────────────────────────────────────────────────────────┘
+```
+
+---
+
+### 4. New String Resource Keys
+
+All keys below must be added to both `shared/src/commonMain/composeResources/values/strings.xml` (English) and `shared/src/commonMain/composeResources/values-es/strings.xml` (Spanish).
+
+| Key | English value | Spanish value |
+|---|---|---|
+| `sync_status_synced_cd` | Synced to cloud | Sincronizado con la nube |
+| `sync_status_pending_cd` | Sync pending | Sincronización pendiente |
+| `sync_status_failed_cd` | Sync failed | Error de sincronización |
+| `sync_notification_channel_name` | Sync Failures | Errores de sincronización |
+| `sync_notification_channel_desc` | Alerts when a report could not be uploaded to the city server after repeated attempts. | Alertas cuando un reporte no pudo ser enviado al servidor de la ciudad después de varios intentos. |
+| `sync_notification_title` | Sync failed | Error de sincronización |
+| `sync_notification_body` | Report "%1$s" could not be uploaded after 5 attempts. Tap to retry. | El reporte "%1$s" no pudo ser enviado después de 5 intentos. Toca para reintentar. |
+| `sync_notification_action_retry` | Retry Sync | Reintentar sincronización |
+| `sync_snackbar_message` | Sync failed for "%1$s". Reopen the app when you are online to retry. | Error al sincronizar "%1$s". Vuelve a abrir la aplicación cuando tengas conexión para reintentar. |
+| `sync_snackbar_action` | Retry Sync | Reintentar sincronización |
+
+Notes on the table:
+- Keys suffixed `_cd` are `contentDescription` values passed to `Icon` composables. They are read by screen-reader assistive technology and must be concise and action-oriented.
+- The `%1$s` placeholder in `sync_notification_body` and `sync_snackbar_message` is substituted at runtime with `report.title`. On Android, `String.format(context.getString(...), reportTitle)` is used; in commonMain Compose, `stringResource(Res.string.sync_notification_body, reportTitle)` with parameterised string resources handles substitution.
+- `sync_notification_channel_name` and `sync_notification_channel_desc` are shown in the Android system notification settings UI, not inside the app — they should use plain prose rather than app-internal jargon.
+
+---
+
+### 5. Material3 Component Summary
+
+| Surface | Component added / changed | Notes |
+|---|---|---|
+| `MyReportsScreen` — each `ElevatedCard` | `SyncStatusIcon` (new composable) | Inserted between `Text(title)` and `StatusChip` in the existing `Row` |
+| `MyReportsScreen` — each `ElevatedCard` | `Icon` (`CloudDone` / `CloudUpload` / `SyncProblem`) | Inside `SyncStatusIcon`; 18dp, M3 color token |
+| `MyReportsState` | `syncStates: Map<String, SyncStatus>` field added | Loaded by `MyReportsViewModel` from `GetPendingSyncsUseCase` |
+| Android device notification | `NotificationCompat.Builder` (existing Android API, not a Compose component) | Channel `sync_failures`; `PendingIntent` to `SyncRetryReceiver` |
+| Web root `Scaffold` | `SnackbarHost` + `showSnackbar(duration = Indefinite)` | Existing M3 `Snackbar`; wired to `SharedFlow<SyncFailureEvent>` |
+
+No new navigation routes. No new screens. No `BottomSheet`, `Dialog`, or `AlertDialog` introduced by this feature.
+
+---
+
+### 6. States for `SyncStatusIcon`
+
+| State | Trigger condition | Visual |
+|---|---|---|
+| PENDING | New report saved; `syncedAt == null` and `syncFailureCount == 0` | `CloudUpload` icon, `onSurfaceVariant` |
+| IN_PROGRESS | Sync job is actively running | `CloudUpload` icon, `onSurfaceVariant` (same visual as PENDING; no spinner to keep the card row clean) |
+| SYNCED | `syncedAt != null` and `syncFailureCount == 0` | `CloudDone` icon, `primary` (civic green) |
+| FAILED | `syncFailureCount >= 1` | `SyncProblem` icon, `error` (red) |
+
+`IN_PROGRESS` does not show a spinner inside the list item because it would animate every visible card during a batch sync, creating visual noise. The `CloudUpload` icon is sufficient to convey "something is happening"; detailed progress belongs in a hypothetical future sync progress screen, not in the list.
+
+---
+
+### 7. Adaptive Layout Notes
+
+The `SyncStatusIcon` is an 18dp `Icon` — it is readable and non-intrusive at all screen widths used by Android phones, iOS devices, and Web browser windows. On tablet and web layouts where `NavigationRail` is used, the `ElevatedCard` may be rendered in a narrower content column (up to ~600dp max-width). The three-element row (`title [weight=1f]`, `SyncStatusIcon`, `StatusChip`) collapses gracefully: the title truncates before either right-side element is pushed off-screen.
+
+---
+
+**Status**: `Ready`
+
+---
+
 ## Template (for new features)
 
 ### [FEAT-000] Feature Title

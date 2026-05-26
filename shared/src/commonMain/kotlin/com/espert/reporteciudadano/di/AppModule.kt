@@ -6,6 +6,7 @@ import com.espert.reporteciudadano.data.repository.ReportRepositoryImpl
 import com.espert.reporteciudadano.database.AppDatabase
 import com.espert.reporteciudadano.domain.repository.GeocodingRepository
 import com.espert.reporteciudadano.domain.repository.ReportRepository
+import com.espert.reporteciudadano.domain.repository.SyncStateRepository
 import com.espert.reporteciudadano.domain.usecase.*
 import com.espert.reporteciudadano.feature.camera.CameraViewModel
 import com.espert.reporteciudadano.feature.myreports.MyReportsViewModel
@@ -20,6 +21,7 @@ import io.ktor.serialization.kotlinx.json.*
 import kotlinx.serialization.json.Json
 import org.koin.core.module.dsl.viewModel
 import org.koin.core.module.dsl.viewModelOf
+import org.koin.core.parameter.parametersOf
 import org.koin.dsl.module
 
 fun appModule(driverFactory: DatabaseDriverFactory) = module {
@@ -40,7 +42,7 @@ fun appModule(driverFactory: DatabaseDriverFactory) = module {
     viewModelOf(::AppViewModel)
     viewModelOf(::CameraViewModel)
     viewModel { ReportFormViewModel(get(), get()) }
-    viewModelOf(::MyReportsViewModel)
+    viewModel { MyReportsViewModel(get(), getOrNull()) }
     viewModel { (reportId: String) -> ReportDetailViewModel(reportId, get(), get()) }
     viewModelOf(::ReportsMapViewModel)
 }

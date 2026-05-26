@@ -8,4 +8,6 @@ class FakeReportRepository : ReportRepository {
     override suspend fun save(report: CitizenReport): Result<Unit> = runCatching { saved.add(report); Unit }
     override suspend fun getAll(): Result<List<CitizenReport>> = runCatching { saved.toList() }
     override suspend fun getById(id: String): Result<CitizenReport> = runCatching { saved.first { it.id == id } }
+    override suspend fun getByIds(ids: List<String>): Result<List<CitizenReport>> =
+        runCatching { saved.filter { it.id in ids } }
 }

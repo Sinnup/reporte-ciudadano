@@ -13,6 +13,7 @@ kotlin {
 }
 dependencies {
     implementation(projects.shared)
+    implementation(projects.feature.cloudsync)
 
     implementation(libs.androidx.activity.compose)
 

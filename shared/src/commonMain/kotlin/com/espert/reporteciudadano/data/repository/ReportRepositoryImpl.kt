@@ -56,6 +56,35 @@ class ReportRepositoryImpl(private val db: AppDatabase) : ReportRepository {
         }
     }
 
+    override suspend fun getByIds(ids: List<String>): Result<List<CitizenReport>> = withContext(Dispatchers.Default) {
+        runCatching {
+            ids.mapNotNull { id ->
+                runCatching {
+                    val entity = db.appDatabaseQueries.getReportById(id).executeAsOneOrNull() ?: return@mapNotNull null
+                    val photos = db.appDatabaseQueries.getPhotosForReport(id).executeAsList()
+                        .map { p ->
+                            ReportPhoto(
+                                p.id,
+                                p.local_path,
+                                if (p.exif_latitude != null && p.exif_longitude != null)
+                                    GeoLocation(p.exif_latitude, p.exif_longitude)
+                                else null
+                            )
+                        }
+                    CitizenReport(
+                        id = entity.id,
+                        title = entity.title,
+                        description = entity.description,
+                        photos = photos,
+                        location = GeoLocation(entity.latitude, entity.longitude),
+                        status = ReportStatus.valueOf(entity.status),
+                        createdAt = entity.created_at
+                    )
+                }.getOrNull()
+            }
+        }
+    }
+
     override suspend fun getById(id: String): Result<CitizenReport> = withContext(Dispatchers.Default) {
         runCatching {
             val entity = db.appDatabaseQueries.getReportById(id).executeAsOne()

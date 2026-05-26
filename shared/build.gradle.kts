@@ -103,7 +103,7 @@ sqldelight {
     databases {
         create("AppDatabase") {
             packageName.set("com.espert.reporteciudadano.database")
-            version = 2
+            version = 3
         }
     }
 }
