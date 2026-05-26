@@ -973,6 +973,37 @@ The `LocationDisplayCard` uses `Modifier.fillMaxWidth()` on both `ReportFormScre
 
 ---
 
+### [FEAT-012] Greeting in test.md
+
+**Status**: `Done`
+
+**Architect Notes**
+
+Layer impact: documentation/test file only. No Kotlin source, no Gradle modules, no dependencies, no platform-specific code. `test.md` is a scratchpad file tracked in the repo for integration tests and exploratory notes. A greeting line at the top of the file confirms the file is writable by the issue pipeline and validates the end-to-end feature flow on a non-production artifact.
+
+No new Gradle submodule. No new library dependencies. No domain model changes. No Koin module changes.
+
+**User Story** *(Business Analyst)*
+> As a developer,
+> I want to see a greeting message at the top of `test.md`,
+> So that I can verify the issue pipeline (Architect → BA → Designer → Developer → QA → Versioning) executes correctly on a safe, non-production file.
+
+**Acceptance Criteria**
+- [ ] `test.md` contains a clearly visible greeting line (e.g., `¡Hola, ReporteCiudadano!`).
+- [ ] The greeting is placed at the top of the file, before existing content.
+- [ ] No other file in the repository is modified except `test.md`, `features.md`, and `changelog.md`.
+- [ ] The commit message follows Conventional Commits format.
+
+**UX/UI Proposal** *(Designer — approved)*
+
+This feature has no screen or UI component. The "design" deliverable is the exact text of the greeting and its placement within `test.md`.
+
+- **Greeting text**: `¡Hola, ReporteCiudadano! 👋` — uses the project name to make the greeting identifiable at a glance; the wave emoji adds warmth without introducing external imagery.
+- **Placement**: first line of `test.md`, followed by a blank line separator before the existing content. This follows the standard Markdown convention for top-level headings/intros.
+- **Format**: plain text line (no Markdown heading prefix needed — `test.md` is not a published document).
+
+---
+
 ## Template (for new features)
 
 ### [FEAT-000] Feature Title

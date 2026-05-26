@@ -9,6 +9,10 @@ Format: `[version] — YYYY-MM-DD`
 
 ## [Unreleased]
 
+### Added — 2026-05-25
+
+- **FEAT-012** — Greeting in test.md: added `¡Hola, ReporteCiudadano! 👋` at the top of `test.md` to validate the end-to-end feature pipeline on a non-production artifact.
+
 ### Changed — 2026-05-24
 
 - **CI** — Rewrote `.github/workflows/kmp.yml` from a single serial build job into five independent parallel jobs (`compile-android`, `compile-ios`, `compile-js`, `compile-wasmjs`, `test-jvm`) plus an `all-green` gate job that acts as the single required branch-protection status check. JDK upgraded from 11 to 17 to satisfy AGP 9.2.1. Gradle caching via `gradle/actions/setup-gradle@v4`. `concurrency` group added to cancel stale in-flight runs on new pushes. Test results uploaded as an artifact from `test-jvm` (always, including on failure).
