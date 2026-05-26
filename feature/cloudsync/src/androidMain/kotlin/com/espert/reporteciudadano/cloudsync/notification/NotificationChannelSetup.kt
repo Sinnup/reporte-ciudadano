@@ -4,6 +4,7 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
 import androidx.core.content.getSystemService
+import com.espert.reporteciudadano.cloudsync.R
 
 const val SYNC_FAILURES_CHANNEL_ID = "sync_failures"
 
@@ -18,10 +19,10 @@ object NotificationChannelSetup {
 
         val channel = NotificationChannel(
             SYNC_FAILURES_CHANNEL_ID,
-            "Sync Failures",
+            context.getString(R.string.sync_notification_channel_name),
             NotificationManager.IMPORTANCE_DEFAULT
         ).apply {
-            description = "Alerts when a report could not be uploaded to the city server after repeated attempts."
+            description = context.getString(R.string.sync_notification_channel_desc)
         }
         manager.createNotificationChannel(channel)
     }

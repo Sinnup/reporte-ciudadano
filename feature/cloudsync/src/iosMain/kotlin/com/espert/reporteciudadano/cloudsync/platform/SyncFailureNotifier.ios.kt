@@ -2,7 +2,13 @@
 
 package com.espert.reporteciudadano.cloudsync.platform
 
+import kotlinx.coroutines.runBlocking
+import org.jetbrains.compose.resources.getString
 import platform.UserNotifications.*
+import reporteciudadano.shared.generated.resources.Res
+import reporteciudadano.shared.generated.resources.sync_notification_action_retry
+import reporteciudadano.shared.generated.resources.sync_notification_body
+import reporteciudadano.shared.generated.resources.sync_notification_title
 
 private const val RETRY_SYNC_ACTION_ID = "RETRY_SYNC"
 private const val SYNC_FAILURE_CATEGORY_ID = "SYNC_FAILURE"
@@ -10,9 +16,11 @@ private const val SYNC_FAILURE_CATEGORY_ID = "SYNC_FAILURE"
 actual object SyncFailureNotifier {
 
     actual fun notifySyncFailure(reportId: String, reportTitle: String) {
+        val title = runBlocking { getString(Res.string.sync_notification_title) }
+        val body = runBlocking { getString(Res.string.sync_notification_body, reportTitle) }
         val content = UNMutableNotificationContent().apply {
-            setTitle("Sync failed")
-            setBody("Report \"$reportTitle\" could not be uploaded after 5 attempts. Tap to retry.")
+            setTitle(title)
+            setBody(body)
             setCategoryIdentifier(SYNC_FAILURE_CATEGORY_ID)
             setUserInfo(mapOf<Any?, Any?>("reportId" to reportId))
         }
@@ -39,9 +47,10 @@ actual object SyncFailureNotifier {
      * Call this from the iOS app entry point (AppDelegate / MainViewController.swift) at startup.
      */
     fun registerNotificationCategory() {
+        val retryLabel = runBlocking { getString(Res.string.sync_notification_action_retry) }
         val retryAction = UNNotificationAction.actionWithIdentifier(
             identifier = RETRY_SYNC_ACTION_ID,
-            title = "Retry Sync",
+            title = retryLabel,
             options = UNNotificationActionOptions.uNNotificationActionOptionNone
         )
         val category = UNNotificationCategory.categoryWithIdentifier(

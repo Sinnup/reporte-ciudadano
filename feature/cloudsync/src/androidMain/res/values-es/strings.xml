@@ -1,0 +1,7 @@
+<resources>
+    <string name="sync_notification_channel_name">Errores de sincronización</string>
+    <string name="sync_notification_channel_desc">Alertas cuando un reporte no pudo ser enviado al servidor de la ciudad después de varios intentos.</string>
+    <string name="sync_notification_title">Error de sincronización</string>
+    <string name="sync_notification_body">El reporte \"%1$s\" no pudo ser enviado después de 5 intentos. Toca para reintentar.</string>
+    <string name="sync_notification_action_retry">Reintentar sincronización</string>
+</resources>

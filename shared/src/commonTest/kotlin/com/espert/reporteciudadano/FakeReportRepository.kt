@@ -8,10 +8,17 @@ import kotlinx.coroutines.flow.map
 
 class FakeReportRepository : ReportRepository {
     private val _saved = MutableStateFlow<List<CitizenReport>>(emptyList())
-    val saved: List<CitizenReport> get() = _saved.value
+    val saved: FakeList = FakeList(_saved)
+
+    class FakeList(private val flow: MutableStateFlow<List<CitizenReport>>) {
+        fun add(report: CitizenReport) { flow.value = flow.value + report }
+        fun first(): CitizenReport = flow.value.first()
+        operator fun get(index: Int): CitizenReport = flow.value[index]
+        val size: Int get() = flow.value.size
+    }
 
     override suspend fun save(report: CitizenReport): Result<Unit> = runCatching {
-        _saved.value = _saved.value + report
+        _saved.value += report
     }
     override suspend fun getAll(): Result<List<CitizenReport>> = runCatching { _saved.value.toList() }
     override suspend fun getById(id: String): Result<CitizenReport> = runCatching { _saved.value.first { it.id == id } }

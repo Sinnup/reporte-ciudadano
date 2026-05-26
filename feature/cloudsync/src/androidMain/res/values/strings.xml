@@ -1,0 +1,7 @@
+<resources>
+    <string name="sync_notification_channel_name">Sync Failures</string>
+    <string name="sync_notification_channel_desc">Alerts when a report could not be uploaded to the city server after repeated attempts.</string>
+    <string name="sync_notification_title">Sync failed</string>
+    <string name="sync_notification_body">Report \"%1$s\" could not be uploaded after 5 attempts. Tap to retry.</string>
+    <string name="sync_notification_action_retry">Retry Sync</string>
+</resources>

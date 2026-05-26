@@ -21,7 +21,13 @@ class MyReportsViewModel(
     fun processIntent(intent: MyReportsIntent) {
         when (intent) {
             is MyReportsIntent.SelectReport -> { /* handled by callback */ }
-            MyReportsIntent.Refresh -> { /* no-op: Flow keeps the list live */ }
+            MyReportsIntent.Refresh -> refreshSyncStates()
+        }
+    }
+
+    private fun refreshSyncStates() {
+        viewModelScope.launch {
+            _state.update { it.copy(syncStates = loadSyncStates()) }
         }
     }
 

@@ -23,9 +23,12 @@ class ReportDetailViewModel(
     init {
         viewModelScope.launch {
             getReportById.observe(reportId)
-                .filterNotNull()
                 .catch { e -> _state.update { s -> s.copy(isLoading = false, error = e.message) } }
                 .collect { report ->
+                    if (report == null) {
+                        _state.update { s -> s.copy(isLoading = false, error = "not_found") }
+                        return@collect
+                    }
                     _state.update { s -> s.copy(report = report, isLoading = false) }
                     if (!geocodingTriggered) {
                         geocodingTriggered = true
