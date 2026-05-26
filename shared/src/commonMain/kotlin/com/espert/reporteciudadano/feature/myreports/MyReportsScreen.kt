@@ -4,12 +4,17 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CloudDone
+import androidx.compose.material.icons.filled.CloudUpload
+import androidx.compose.material.icons.filled.SyncProblem
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.espert.reporteciudadano.domain.model.ReportStatus
+import com.espert.reporteciudadano.domain.model.SyncStatus
 import org.jetbrains.compose.resources.stringResource
 import reporteciudadano.shared.generated.resources.Res
 import reporteciudadano.shared.generated.resources.*
@@ -46,8 +51,15 @@ fun MyReportsScreen(
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text(report.title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-                                Spacer(Modifier.width(8.dp))
+                                Text(
+                                    report.title,
+                                    style = MaterialTheme.typography.titleMedium,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                SyncStatusIcon(
+                                    syncStatus = state.syncStates[report.id] ?: SyncStatus.PENDING,
+                                    modifier = Modifier.padding(end = 8.dp)
+                                )
                                 StatusChip(report.status)
                             }
                         }
@@ -83,4 +95,46 @@ private fun statusLabel(status: ReportStatus): String = when (status) {
     ReportStatus.IN_PROGRESS -> stringResource(Res.string.status_in_progress)
     ReportStatus.RESOLVED    -> stringResource(Res.string.status_resolved)
     ReportStatus.DISCARDED   -> stringResource(Res.string.status_discarded)
+}
+
+/**
+ * Displays a small cloud sync status icon (18dp) for a single report card row.
+ *
+ * SYNCED    → CloudDone, primary color
+ * PENDING / IN_PROGRESS → CloudUpload, onSurfaceVariant (muted)
+ * FAILED    → SyncProblem, error color (red)
+ */
+@Composable
+fun SyncStatusIcon(
+    syncStatus: SyncStatus,
+    modifier: Modifier = Modifier
+) {
+    val (icon, tint, contentDesc) = when (syncStatus) {
+        SyncStatus.SYNCED ->
+            Triple(
+                Icons.Default.CloudDone,
+                MaterialTheme.colorScheme.primary,
+                stringResource(Res.string.sync_status_synced_cd)
+            )
+        SyncStatus.PENDING,
+        SyncStatus.IN_PROGRESS ->
+            Triple(
+                Icons.Default.CloudUpload,
+                MaterialTheme.colorScheme.onSurfaceVariant,
+                stringResource(Res.string.sync_status_pending_cd)
+            )
+        SyncStatus.FAILED ->
+            Triple(
+                Icons.Default.SyncProblem,
+                MaterialTheme.colorScheme.error,
+                stringResource(Res.string.sync_status_failed_cd)
+            )
+    }
+
+    Icon(
+        imageVector = icon,
+        contentDescription = contentDesc,
+        tint = tint,
+        modifier = modifier.size(18.dp)
+    )
 }

@@ -58,6 +58,8 @@ One branch per feature. Never develop two features in parallel.
 | 9 | FEAT-009 | Light/Dark Color Theme | `feature/feat-009-color-theme` |
 | 10 | FEAT-010 | Location Service Gate | `feature/feat-010-location-service-gate` |
 | 11 | FEAT-011 | Offline-First Location | `feature/feat-011-offline-first-location` |
+| 12 | FEAT-012 | Greeting in test.md | `feature/feat-012-greeting-test` |
+| 13 | FEAT-013 | Cloud Sync — DynamoDB + S3 | `feature/feat-013-cloud-sync` |
 
 ---
 
@@ -869,3 +871,533 @@ No new Gradle submodule. All changes are within `:shared` `commonMain` and platf
 - [x] No new library dependencies
 - [x] No module dependency cycles — `ReportDetailViewModel` now depends on `ReverseGeocodeUseCase` which already exists in the DI graph
 - [x] `AppModule.kt` update: one binding change (`ReportDetailViewModel`); no new modules
+
+---
+
+## FEAT-013 — Cloud Sync: DynamoDB + S3
+
+### Overview
+
+FEAT-013 introduces reliable, offline-tolerant cloud synchronisation of all citizen reports and their associated photos to AWS. Every `CitizenReport` row is uploaded to DynamoDB and every photo file is uploaded to S3. Sync is performed in the background with platform-appropriate scheduling and a per-report failure counter that triggers a device notification after five consecutive failures.
+
+---
+
+### New Gradle Submodule
+
+A new Android Library submodule is introduced:
+
+```
+:feature:cloudsync          // commonMain domain + sync orchestration
+```
+
+Module placement rationale: the sync scheduler, WorkManager binding, and notification dispatch are Android-specific and must not pollute `:shared`. All domain interfaces and use cases for sync live in `:feature:cloudsync`'s `commonMain`. Platform-specific scheduler code (WorkManager on Android, BGTaskScheduler on iOS, online-event listener on Web) lives in the respective source sets of this new module.
+
+Dependency graph (no cycles):
+
+```
+:androidApp  →  :feature:cloudsync (androidMain)
+:shared      ←  :feature:cloudsync (commonMain reads domain models from :shared)
+```
+
+`:feature:cloudsync` depends on `:shared` for domain models (`CitizenReport`, `GeoLocation`, `ReportPhoto`) and the existing `ReportRepository` interface. It does NOT depend on any other feature module.
+
+`:androidApp/build.gradle.kts` gains:
+```
+implementation(projects.feature.cloudsync)
+```
+
+`:feature:cloudsync/build.gradle.kts` targets:
+- `androidMain`, `iosMain`, `jsMain`, `wasmJsMain` (same KMP target set as `:shared`)
+- `androidMain` adds: `androidx.work:work-runtime-ktx`, `koin-android`, Ktor OkHttp engine
+- `commonMain` adds: `ktor-client-core`, `koin-core`, `kotlinx-coroutines-core` (all version-catalogued)
+
+No new library versions need to be introduced beyond `androidx.work:work-runtime-ktx` (WorkManager). Add to `libs.versions.toml`:
+
+```toml
+[versions]
+workmanager = "2.10.1"
+
+[libraries]
+androidx-work-runtime-ktx = { module = "androidx.work:work-runtime-ktx", version.ref = "workmanager" }
+```
+
+---
+
+### Domain Model Additions
+
+All new domain types are pure Kotlin in `commonMain`. They are never platform-specific.
+
+#### `SyncStatus` (new enum in `domain/model/`)
+
+```
+SyncStatus
+  PENDING     // not yet attempted
+  IN_PROGRESS // currently running
+  SYNCED      // successfully uploaded
+  FAILED      // last attempt failed; failure count below threshold
+```
+
+This enum is used only within the sync domain — it is independent of `ReportStatus` (which describes the civic lifecycle of the report). `SyncStatus` is an operational concern, not a business one.
+
+#### `SyncRecord` (new data class in `domain/model/`)
+
+```
+SyncRecord
+  reportId        : String
+  syncStatus      : SyncStatus
+  syncedAt        : Long?         // epoch millis; null if never synced
+  syncFailureCount: Int           // reset to 0 on success
+```
+
+`SyncRecord` is the domain model for tracking the sync state of a single report. It maps directly to the new columns added to `ReportEntity` (see Database Migration section). It is never exposed to the presentation layer — the sync pipeline is a background concern invisible to the user except via the failure notification.
+
+#### Updated `CitizenReport`
+
+No field changes to `CitizenReport` itself. The sync state is a separate concern tracked in `SyncRecord`, loaded and managed exclusively by the sync domain. This separation ensures the existing presentation layer requires zero changes.
+
+---
+
+### Repository Interface Additions
+
+New interface in `:feature:cloudsync/domain/repository/`:
+
+```kotlin
+interface CloudSyncRepository {
+    // Upload a single report's metadata to DynamoDB.
+    // Idempotent: uses conditional write (attribute_not_exists(id)) or update-if-changed.
+    suspend fun syncReport(report: CitizenReport): Result<Unit>
+
+    // Upload a single photo file to S3.
+    // Idempotent: performs HeadObject before PutObject; skips if ETag matches.
+    suspend fun syncPhoto(reportId: String, localPath: String): Result<Unit>
+
+    // Retrieve all reports whose SyncStatus is PENDING or FAILED and
+    // whose syncFailureCount < MAX_CONSECUTIVE_FAILURES.
+    suspend fun getPendingSyncReports(): Result<List<SyncRecord>>
+
+    // Mark a report sync as succeeded (sets SYNCED, clears failure count, stamps syncedAt).
+    suspend fun markSynced(reportId: String): Result<Unit>
+
+    // Increment failure count. If count reaches MAX_CONSECUTIVE_FAILURES, sets status to FAILED.
+    suspend fun recordSyncFailure(reportId: String): Result<Unit>
+
+    // Reset failure count to 0 and set status back to PENDING (used when the user taps the retry notification).
+    suspend fun resetForRetry(reportId: String): Result<Unit>
+}
+```
+
+`MAX_CONSECUTIVE_FAILURES = 5` is a compile-time constant in `commonMain`.
+
+Also required in `:shared/domain/repository/` — a new query method on the existing `ReportRepository`:
+
+```kotlin
+// Returns all CitizenReport objects for the given list of IDs (used by sync use cases).
+suspend fun getByIds(ids: List<String>): Result<List<CitizenReport>>
+```
+
+---
+
+### Use Case Additions
+
+All use cases are in `:feature:cloudsync/domain/usecase/` and follow the single-`invoke()` rule.
+
+| Use Case | Responsibility |
+|---|---|
+| `SyncReportUseCase` | Orchestrates a full sync for one report: calls `CloudSyncRepository.syncReport(report)`, then iterates photos calling `CloudSyncRepository.syncPhoto(...)` for each. On any failure, delegates to `RecordSyncFailureUseCase`. On full success, calls `CloudSyncRepository.markSynced(reportId)`. |
+| `SyncPhotoUseCase` | Thin wrapper: calls `CloudSyncRepository.syncPhoto(reportId, localPath)`. Exists so the photo upload path can be tested and retried independently. |
+| `RetryFailedSyncsUseCase` | Called by the notification retry path. Calls `CloudSyncRepository.resetForRetry(reportId)` for all reports with `SyncStatus.FAILED` and `syncFailureCount >= MAX_CONSECUTIVE_FAILURES`, then re-enqueues the platform sync scheduler. |
+| `GetPendingSyncsUseCase` | Calls `CloudSyncRepository.getPendingSyncReports()` and returns the list. Used by the scheduler on all platforms to determine if work is needed. |
+| `RecordSyncFailureUseCase` | Calls `CloudSyncRepository.recordSyncFailure(reportId)`. If the resulting failure count equals `MAX_CONSECUTIVE_FAILURES`, it returns a flag indicating a notification must be fired. The caller (the platform Worker/task) is responsible for dispatching the notification. |
+
+---
+
+### Database Migration — Schema Version 3
+
+Two new columns are added to `ReportEntity`. The `ReportPhotoEntity` does not change.
+
+#### Target schema additions
+
+```sql
+-- New columns added to ReportEntity:
+synced_at        INTEGER           -- epoch millis; NULL until first successful sync
+sync_failure_count INTEGER NOT NULL DEFAULT 0
+```
+
+#### Migration file `2.sqm` (version 2 → 3)
+
+SQLite below 3.35 does not support `ADD COLUMN` with constraints other than `DEFAULT` and `NOT NULL DEFAULT`. Both new columns are safe to add with `ALTER TABLE ADD COLUMN` because:
+- `synced_at` is nullable (`INTEGER` with no `NOT NULL`) — valid `ADD COLUMN` target.
+- `sync_failure_count` has a `DEFAULT 0` — valid `ADD COLUMN` target.
+
+```sql
+-- 2.sqm  (migration from schema version 2 to 3)
+ALTER TABLE ReportEntity ADD COLUMN synced_at INTEGER;
+ALTER TABLE ReportEntity ADD COLUMN sync_failure_count INTEGER NOT NULL DEFAULT 0;
+```
+
+This is the simplest valid migration pattern. No table-rename cycle is needed here because no column is removed or renamed.
+
+New SQLDelight queries to add to `AppDatabase.sq`:
+
+```sql
+getSyncRecord:
+SELECT id, synced_at, sync_failure_count FROM ReportEntity WHERE id = ?;
+
+getAllPendingSync:
+SELECT id, synced_at, sync_failure_count FROM ReportEntity
+WHERE synced_at IS NULL OR sync_failure_count > 0;
+
+markReportSynced:
+UPDATE ReportEntity SET synced_at = ?, sync_failure_count = 0 WHERE id = ?;
+
+incrementSyncFailure:
+UPDATE ReportEntity SET sync_failure_count = sync_failure_count + 1 WHERE id = ?;
+
+resetSyncForRetry:
+UPDATE ReportEntity SET sync_failure_count = 0 WHERE id = ?;
+```
+
+`schemaVersion` in `shared/build.gradle.kts` increments from `2` to `3`.
+
+---
+
+### AWS SDK Choice — KMP Compatibility Analysis
+
+As of mid-2025, `aws-sdk-kotlin` (the official AWS Kotlin SDK) targets JVM and Android only. It does not publish KMP artifacts for `iosArm64`, `iosSimulatorArm64`, `js`, or `wasmJs`. Using it directly in `commonMain` would break non-Android builds.
+
+**Decision: raw Ktor HTTP calls for all AWS API interactions.**
+
+DynamoDB and S3 both expose REST APIs with well-documented request signatures (AWS Signature Version 4). Ktor is already in the project across all platforms. All AWS API calls are implemented as Ktor requests in `data/datasource/remote/` within `:feature:cloudsync`. Domain interfaces in `commonMain` remain free of any AWS or Ktor types.
+
+The AWS Signature Version 4 (SigV4) signing algorithm is pure Kotlin (HMAC-SHA256 with `kotlinx-crypto` or `javax.crypto` on Android, CommonCrypto on iOS via Kotlin/Native, SubtleCrypto on Web). Given that `javax.crypto` is JVM-only, the HMAC signing must use an `expect/actual` pattern:
+
+**File**: `feature/cloudsync/src/commonMain/kotlin/.../platform/AwsSigV4Signer.kt`
+
+```kotlin
+expect fun hmacSha256(key: ByteArray, data: ByteArray): ByteArray
+```
+
+Actuals:
+| Platform | Implementation |
+|---|---|
+| `androidMain` | `javax.crypto.Mac` with `HmacSHA256` |
+| `iosMain` | `CommonCrypto.CCHmac` via Kotlin/Native |
+| `jsMain` | `SubtleCrypto.sign` (async, wrapped in `runBlocking` or converted to suspend) |
+| `wasmJsMain` | Same as `jsMain` |
+
+The SigV4 signing logic itself (string-to-sign construction, canonical request, date/scope headers) is pure Kotlin in `commonMain` and calls into the `hmacSha256` actual. No new library dependency is required for SigV4 — only the platform HMAC actual.
+
+**Ktor client engines** in `:feature:cloudsync` follow the same pattern as `:shared`:
+- `androidMain`: OkHttp
+- `iosMain`: Darwin
+- `jsMain`: Js
+- `wasmJsMain`: no Ktor Wasm engine available — sync is a no-op on WasmJS (see Web section below)
+
+---
+
+### AWS Credentials Provider
+
+AWS credentials are never hardcoded. They are read from a platform-local properties file at runtime.
+
+#### Gitignored file name and format
+
+**File**: `aws.properties` in the project root (already in `.gitignore`, which currently lists `*.properties` except `gradle.properties`)
+
+Verify and add the following line to `.gitignore` if not already covered:
+```
+aws.properties
+```
+
+**File format** (`aws.properties`):
+```properties
+aws.accessKeyId=AKIA...
+aws.secretAccessKey=wJalr...
+aws.region=us-east-1
+aws.dynamodb.tableName=reporteciudadano-reports
+aws.s3.bucketName=reporteciudadano-photos
+```
+
+#### `AwsCredentialsProvider` — expect/actual
+
+**File**: `feature/cloudsync/src/commonMain/kotlin/.../platform/AwsCredentialsProvider.kt`
+
+```kotlin
+data class AwsCredentials(
+    val accessKeyId: String,
+    val secretAccessKey: String,
+    val region: String,
+    val dynamoDbTableName: String,
+    val s3BucketName: String
+)
+
+expect fun loadAwsCredentials(): AwsCredentials
+```
+
+| Platform | Loading mechanism |
+|---|---|
+| `androidMain` | Read `aws.properties` from Android `assets/` folder at runtime. The file must be copied to `androidApp/src/main/assets/aws.properties` by the developer (gitignored from the assets path as well). Accessed via `context.assets.open("aws.properties").use { Properties().apply { load(it) } }`. Context obtained via Koin `androidContext()`. |
+| `iosMain` | Read `aws.properties` from `Bundle.main.path(forResource: "aws", ofType: "properties")`. The file must be added to the Xcode project's "Copy Bundle Resources" phase (gitignored from source control). |
+| `jsMain` | Read from a compile-time-generated Kotlin object `AwsConfig` that the Gradle `processResources` task populates by reading `aws.properties` from the project root at build time and writing a generated Kotlin file into `jsMain`. The generated file is gitignored. |
+| `wasmJsMain` | Same as `jsMain` — compile-time injection via Gradle task. |
+
+The developer must document in `README.md` that `aws.properties` must be manually created before any build that exercises the sync feature.
+
+---
+
+### Platform-Specific Sync Scheduler Strategy
+
+#### Android — WorkManager `CoroutineWorker`
+
+The Android sync scheduler is the reference implementation. WorkManager provides guaranteed execution even after process death, subject to declared constraints.
+
+**Worker class**: `CloudSyncWorker : CoroutineWorker(context, params)` in `androidMain`.
+
+Key configuration:
+- `Constraints`: `requiresNetwork = true` (uses `NetworkType.CONNECTED`)
+- Backoff policy: `BackoffPolicy.EXPONENTIAL`, initial delay `30 seconds`, maximum 5 retries per attempt cycle (WorkManager's built-in retry). The feature-level `MAX_CONSECUTIVE_FAILURES = 5` counter is tracked in the DB independently of WorkManager's retry count — they serve different purposes (WorkManager retries a single enqueue; the DB counter tracks failures across multiple separate enqueue cycles).
+- `setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)`: applied when the sync is triggered immediately after a report is saved (the "eager" path). Background periodic syncs do not use expedited mode.
+- Work tag: `"cloud_sync"` — used to check existing enqueued work before re-enqueuing (avoid duplicates via `ExistingWorkPolicy.KEEP`).
+- Periodic sync: `PeriodicWorkRequest` with 15-minute minimum interval (WorkManager minimum), used as a catch-all for reports that missed the eager sync.
+
+**Trigger points**:
+1. After `SaveReportUseCase` completes successfully — enqueue an expedited `OneTimeWorkRequest` immediately.
+2. On app foreground (`ProcessLifecycleOwner.ON_START`) — enqueue a regular `OneTimeWorkRequest` if any PENDING records exist.
+3. Periodic `PeriodicWorkRequest` registered at app startup.
+
+The `CloudSyncWorker.doWork()` body:
+1. Calls `GetPendingSyncsUseCase` to retrieve reports needing sync.
+2. For each, calls `SyncReportUseCase`.
+3. On `SyncReportUseCase` failure, calls `RecordSyncFailureUseCase`. If it signals that the failure threshold is reached, calls the `SyncFailureNotifier` (see Failure Notification section).
+4. Returns `Result.success()` if all reports were processed (even those that failed — WorkManager should not retry the whole batch because individual failures are tracked in the DB). Returns `Result.retry()` only on a total infrastructure failure (e.g., Ktor engine init failure, DB unavailable).
+
+#### iOS — BGTaskScheduler
+
+iOS does not allow persistent background Workers. The closest equivalent is `BGTaskScheduler` from the `BackgroundTasks` framework.
+
+**BGProcessingTaskRequest** (identifier: `com.espert.reporteciudadano.cloudsync`):
+- Requires network: `requiresNetworkConnectivity = true`
+- Registered in `AppDelegate` / KMP iOS entry point `MainViewController.swift`.
+- Scheduled via `BGTaskScheduler.shared.submit(request)` on every app backgrounding event (`applicationDidEnterBackground`).
+- Handler calls `GetPendingSyncsUseCase`, then `SyncReportUseCase` for each pending report. Must call `task.setTaskCompleted(success: true/false)` before the system time limit (~30 seconds).
+
+**Foreground fallback**: on every `onAppear` / lifecycle `ON_RESUME` equivalent in iOS, the app checks `isNetworkAvailable()` and calls `GetPendingSyncsUseCase`. If pending records exist, sync runs in a foreground coroutine (launched in the ViewModel scope or a dedicated `CoroutineScope` attached to the iOS app lifecycle). This ensures sync happens even if `BGTaskScheduler` is never invoked by the OS (common on devices with heavy battery restrictions).
+
+The iOS `expect/actual` boundary is:
+
+**File**: `feature/cloudsync/src/commonMain/kotlin/.../platform/SyncScheduler.kt`
+
+```kotlin
+expect object SyncScheduler {
+    fun scheduleBackgroundSync()
+    fun cancelBackgroundSync()
+}
+```
+
+| Platform | `scheduleBackgroundSync()` |
+|---|---|
+| `androidMain` | Enqueues WorkManager `PeriodicWorkRequest` and the startup `OneTimeWorkRequest` |
+| `iosMain` | Submits `BGProcessingTaskRequest` to `BGTaskScheduler` |
+| `jsMain` | Registers `window.addEventListener("online", ...)` to trigger `runForegroundSync()` |
+| `wasmJsMain` | Same as `jsMain` |
+
+#### Web (JS / WasmJS) — Online Event Listener
+
+No persistent background scheduler is available in a browser tab. The sync strategy is:
+
+1. On app startup: check `navigator.onLine` (via existing `isNetworkAvailable()`). If true and pending records exist, run sync immediately in a coroutine.
+2. Register `window.addEventListener("online", handler)` where `handler` triggers the sync coroutine.
+3. No `ServiceWorker` scope — this app does not register a service worker. Background sync via `SyncManager` is therefore unavailable.
+
+For `wasmJsMain`: Ktor does not have a WasmJS engine in the current version catalog (`ktor = "3.1.3"`). All network calls in `wasmJsMain` are no-ops. The `CloudSyncRepository` implementation for WasmJS logs a warning and returns `Result.failure(UnsupportedOperationException("Cloud sync is not available on WasmJS"))`. This is a known limitation documented in the feature entry.
+
+---
+
+### Failure Notification Strategy
+
+When `RecordSyncFailureUseCase` signals that `syncFailureCount >= MAX_CONSECUTIVE_FAILURES`, the platform sync scheduler is responsible for dispatching a local notification.
+
+A new `expect/actual` is introduced:
+
+**File**: `feature/cloudsync/src/commonMain/kotlin/.../platform/SyncFailureNotifier.kt`
+
+```kotlin
+expect object SyncFailureNotifier {
+    fun notifySyncFailure(reportId: String, reportTitle: String)
+}
+```
+
+#### Android
+
+- **Notification channel**: `sync_failures`, importance `IMPORTANCE_DEFAULT`, created at app startup in a `NotificationChannelSetup` object called from `Application.onCreate()` (or the Koin `androidMain` module's `onStartup` block).
+- **Notification content**: title `"Sync failed"`, body `"Report \"<title>\" could not be uploaded after 5 attempts. Tap to retry."`.
+- **PendingIntent**: points to `SyncRetryReceiver` (a new `BroadcastReceiver` in `androidMain`). The `Intent` carries the `reportId` as an extra. `SyncRetryReceiver.onReceive()` calls `RetryFailedSyncsUseCase` for the given `reportId`, then re-enqueues a `OneTimeWorkRequest` via WorkManager.
+- **PendingIntent flags**: `FLAG_UPDATE_CURRENT or FLAG_IMMUTABLE`.
+- **Notification ID**: derived from `reportId.hashCode()` so each failing report gets its own dismissible notification.
+
+#### iOS
+
+- **UNUserNotificationCenter**: permission is requested at app startup (alongside any existing permission requests).
+- **Notification content**: same title/body as Android. Adds a custom `UNNotificationAction` with identifier `"RETRY_SYNC"` and title `"Retry"` in a `UNNotificationCategory` registered at startup.
+- **Action handling**: in `UNUserNotificationCenterDelegate.didReceive(_:withCompletionHandler:)`, check for `actionIdentifier == "RETRY_SYNC"`, extract `reportId` from `userInfo`, and call `RetryFailedSyncsUseCase` + `SyncScheduler.scheduleBackgroundSync()`.
+- **No process-death concern**: iOS local notifications can wake the app to the foreground via the action, at which point the foreground sync path takes over.
+
+#### Web
+
+No notification API without a Service Worker. The `SyncFailureNotifier` Web actual shows an **in-app Snackbar** (a Compose `SnackbarHost` message) by posting to a `SharedFlow<SyncFailureEvent>` that is collected by the root composable. The Snackbar message reads `"Sync failed for \"<title>\". Check your connection and reopen the app to retry."` — no retry action button, since Web sync is triggered automatically on next app open when online.
+
+---
+
+### Idempotency Design
+
+All AWS operations are designed to be safe to retry without side effects.
+
+#### DynamoDB (report metadata)
+
+- On first upload: use a `PutItem` request with condition expression `attribute_not_exists(id)`. If the item already exists (idempotent retry scenario), DynamoDB returns `ConditionalCheckFailedException`. The repository implementation catches this and treats it as a success (item is already present).
+- On status update (e.g., `ReportStatus` changed locally after initial sync): use `UpdateItem` with an `UpdateExpression` that overwrites all mutable fields. The `id` primary key is never changed.
+- DynamoDB table schema (to be communicated to DevOps / BA for provisioning):
+
+```
+Partition key: id (String)
+Attributes: title, description, latitude, longitude, status, createdAt, photoPaths (StringSet)
+```
+
+`photoPaths` is a DynamoDB StringSet of S3 object keys (`<reportId>/<filename>`), built during the upload and written atomically in the same `PutItem`/`UpdateItem` call after all S3 uploads complete for that report.
+
+#### S3 (photo files)
+
+- Before each `PutObject`: issue a `HeadObject` request for the key `<reportId>/<filename>`. If the object exists (HTTP 200), skip the upload. If it does not exist (HTTP 404), proceed with `PutObject`.
+- S3 key format: `reports/<reportId>/<localFilename>` where `localFilename` is the last path component of `localPath` (e.g., `photo_001.jpg`).
+- `PutObject` content type: `image/jpeg`. Do not embed metadata beyond the report ID.
+
+---
+
+### MVI Layer Structure for Sync (no dedicated screen)
+
+FEAT-013 has no user-facing screen. The sync pipeline is invisible to the user except through:
+1. A sync status indicator (optional, deferred to BA — may be shown on Report Detail or My Reports as a small icon).
+2. The failure notification.
+
+There is therefore **no new ViewModel, State, or Intent class** for this feature. The sync domain is invoked from:
+- Platform schedulers (WorkManager / BGTaskScheduler / online listener) — not from a ViewModel.
+- `SyncRetryReceiver` (Android) / notification action handler (iOS) — not from a ViewModel.
+
+If the BA decides a sync status indicator is in scope, the `ReportDetailViewModel` and `MyReportsViewModel` would need a `SyncRecord` field in their respective States. That extension is deferred and will be a separate architect note when the BA specifies it.
+
+---
+
+### Koin Module Plan
+
+A new Koin module `cloudSyncModule` is defined in `:feature:cloudsync/di/CloudSyncModule.kt` (commonMain):
+
+```kotlin
+val cloudSyncModule = module {
+    single<CloudSyncRepository> { CloudSyncRepositoryImpl(get(), get()) }
+    factory { SyncReportUseCase(get()) }
+    factory { SyncPhotoUseCase(get()) }
+    factory { RetryFailedSyncsUseCase(get()) }
+    factory { GetPendingSyncsUseCase(get()) }
+    factory { RecordSyncFailureUseCase(get()) }
+}
+```
+
+`CloudSyncRepositoryImpl` takes two injected dependencies: the Ktor `HttpClient` (already a singleton in the existing `AppModule`) and the `AppDatabase` instance (already a singleton).
+
+`cloudSyncModule` is added to the `startKoin { modules(...) }` call in `androidApp/MainActivity.kt` (and equivalents on iOS/Web entry points).
+
+The `AwsCredentialsProvider` is a singleton in the `androidMain`-specific Koin module extension (`androidCloudSyncModule`) since it needs `androidContext()`. On iOS and Web it is accessed directly (no Koin injection needed for a stateless `expect fun loadAwsCredentials()`).
+
+---
+
+### File Map for `:feature:cloudsync`
+
+```
+feature/cloudsync/
+  src/
+    commonMain/kotlin/.../cloudsync/
+      domain/
+        model/
+          SyncStatus.kt
+          SyncRecord.kt
+        repository/
+          CloudSyncRepository.kt
+        usecase/
+          SyncReportUseCase.kt
+          SyncPhotoUseCase.kt
+          RetryFailedSyncsUseCase.kt
+          GetPendingSyncsUseCase.kt
+          RecordSyncFailureUseCase.kt
+      data/
+        repository/
+          CloudSyncRepositoryImpl.kt
+        datasource/
+          remote/
+            DynamoDbDataSource.kt     // Ktor calls to DynamoDB REST API
+            S3DataSource.kt           // Ktor calls to S3 REST API
+            AwsSigV4Signer.kt         // SigV4 signing, delegates to expect hmacSha256
+      platform/
+        AwsCredentialsProvider.kt     // expect fun loadAwsCredentials()
+        AwsSigV4Signer.kt             // expect fun hmacSha256(...)
+        SyncScheduler.kt              // expect object SyncScheduler
+        SyncFailureNotifier.kt        // expect object SyncFailureNotifier
+      di/
+        CloudSyncModule.kt
+    androidMain/kotlin/.../cloudsync/
+      platform/
+        AwsCredentialsProvider.android.kt
+        AwsSigV4Signer.android.kt
+        SyncScheduler.android.kt      // WorkManager enqueue logic
+        SyncFailureNotifier.android.kt // NotificationManager dispatch
+      worker/
+        CloudSyncWorker.kt            // CoroutineWorker
+      receiver/
+        SyncRetryReceiver.kt          // BroadcastReceiver
+      notification/
+        NotificationChannelSetup.kt
+    iosMain/kotlin/.../cloudsync/
+      platform/
+        AwsCredentialsProvider.ios.kt
+        AwsSigV4Signer.ios.kt
+        SyncScheduler.ios.kt          // BGTaskScheduler submit
+        SyncFailureNotifier.ios.kt    // UNUserNotificationCenter
+    jsMain/kotlin/.../cloudsync/
+      platform/
+        AwsCredentialsProvider.js.kt
+        AwsSigV4Signer.js.kt
+        SyncScheduler.js.kt           // window.addEventListener("online", ...)
+        SyncFailureNotifier.js.kt     // SharedFlow Snackbar post
+    wasmJsMain/kotlin/.../cloudsync/
+      platform/
+        AwsCredentialsProvider.wasmJs.kt
+        AwsSigV4Signer.wasmJs.kt
+        SyncScheduler.wasmJs.kt       // window.addEventListener("online", ...)
+        SyncFailureNotifier.wasmJs.kt // SharedFlow Snackbar post
+```
+
+---
+
+### Feature Sequence Update
+
+| # | ID | Feature | Branch |
+|---|---|---|---|
+| 12 | FEAT-012 | Greeting in test.md | `feature/feat-012-greeting-test` |
+| 13 | FEAT-013 | Cloud Sync — DynamoDB + S3 | `feature/feat-013-cloud-sync` |
+
+---
+
+### Design Checklist
+
+- [x] New Gradle submodule `:feature:cloudsync` defined (Android Library format, no cycles)
+- [x] `SyncStatus` enum and `SyncRecord` domain model defined in `commonMain`
+- [x] `CloudSyncRepository` interface defined in `domain/repository/`
+- [x] Five use cases defined: `SyncReportUseCase`, `SyncPhotoUseCase`, `RetryFailedSyncsUseCase`, `GetPendingSyncsUseCase`, `RecordSyncFailureUseCase`
+- [x] DB migration `2.sqm` defined (two `ALTER TABLE ADD COLUMN` statements); `schemaVersion` → 3
+- [x] AWS SDK decision: raw Ktor HTTP + SigV4 `expect/actual` HMAC signing (no `aws-sdk-kotlin` — not KMP-compatible)
+- [x] `AwsCredentialsProvider` expect/actual — reads `aws.properties` (gitignored); format documented
+- [x] `SyncScheduler` expect/actual — Android: WorkManager; iOS: BGTaskScheduler + foreground fallback; JS/WasmJS: online event listener
+- [x] `SyncFailureNotifier` expect/actual — Android: `NotificationManager` + `SyncRetryReceiver`; iOS: `UNUserNotificationCenter`; Web: in-app Snackbar via `SharedFlow`
+- [x] Idempotency: DynamoDB `attribute_not_exists(id)` conditional put; S3 `HeadObject` before `PutObject`
+- [x] Platform boundaries identified for all four targets
+- [x] Koin module `cloudSyncModule` defined; no new singleton ViewModel needed
+- [x] No module dependency cycles
+- [x] WasmJS limitation documented (no Ktor WasmJS engine → sync is no-op)

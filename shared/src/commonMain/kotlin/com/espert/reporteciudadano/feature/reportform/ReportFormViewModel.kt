@@ -16,7 +16,8 @@ import kotlin.time.Clock
 class ReportFormViewModel(
     private val saveReportUseCase: SaveReportUseCase,
     private val reverseGeocodeUseCase: ReverseGeocodeUseCase,
-    private val networkAvailable: () -> Boolean = { isNetworkAvailable() }
+    private val networkAvailable: () -> Boolean = { isNetworkAvailable() },
+    private val onReportSaved: () -> Unit = {}
 ) : ViewModel() {
     private val _state = MutableStateFlow(ReportFormState())
     val state: StateFlow<ReportFormState> = _state.asStateFlow()
@@ -79,6 +80,7 @@ class ReportFormViewModel(
                 createdAt = Clock.System.now().toEpochMilliseconds()
             )
             saveReportUseCase(report)
+            onReportSaved()
             _state.update { it.copy(isSubmitting = false) }
             _submitted.send(Unit)
         }

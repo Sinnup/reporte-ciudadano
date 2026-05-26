@@ -5,7 +5,9 @@ CREATE TABLE ReportEntity (
     latitude REAL NOT NULL,
     longitude REAL NOT NULL,
     status TEXT NOT NULL DEFAULT 'SENT',
-    created_at INTEGER NOT NULL
+    created_at INTEGER NOT NULL,
+    synced_at INTEGER,
+    sync_failure_count INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE ReportPhotoEntity (
@@ -24,10 +26,27 @@ getReportById:
 SELECT * FROM ReportEntity WHERE id = ?;
 
 insertReport:
-INSERT OR REPLACE INTO ReportEntity VALUES (?, ?, ?, ?, ?, ?, ?);
+INSERT OR REPLACE INTO ReportEntity (id, title, description, latitude, longitude, status, created_at)
+VALUES (?, ?, ?, ?, ?, ?, ?);
 
 getPhotosForReport:
 SELECT * FROM ReportPhotoEntity WHERE report_id = ? ORDER BY rowid ASC;
 
 insertPhoto:
 INSERT OR REPLACE INTO ReportPhotoEntity VALUES (?, ?, ?, ?, ?);
+
+getSyncRecord:
+SELECT id, synced_at, sync_failure_count FROM ReportEntity WHERE id = ?;
+
+getAllPendingSync:
+SELECT id, synced_at, sync_failure_count FROM ReportEntity
+WHERE synced_at IS NULL OR sync_failure_count > 0;
+
+markReportSynced:
+UPDATE ReportEntity SET synced_at = ?, sync_failure_count = 0 WHERE id = ?;
+
+incrementSyncFailure:
+UPDATE ReportEntity SET sync_failure_count = sync_failure_count + 1 WHERE id = ?;
+
+resetSyncForRetry:
+UPDATE ReportEntity SET sync_failure_count = 0 WHERE id = ?;

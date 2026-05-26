@@ -6,6 +6,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ReporteCiudadano is a Kotlin Multiplatform (KMP) app targeting Android, iOS, and Web using Compose Multiplatform and MVI + Clean Architecture.
 
+## Issue trigger
+If an Dispatcher instruction starts with or contains the word "issue", create a GitHub issue tagged with "claude-task" with the given instructions, don't perform, create or write anything else, just the issue and that's it.
+1. All git credentials are in github.properties.
+
 ## Build & Run
 
 ```bash
@@ -75,6 +79,7 @@ Specialized agents live in `.claude/agents/`. Use them for their designated conc
 | `ux-ui-designer` | UI/UX design proposals per feature |
 | `business-analyst` | User story authoring and requirements |
 | `migration-expert` | Dependency upgrades, version catalog management, breaking-change analysis across all KMP targets |
+| `aws-solutions-architect` | AWS infrastructure provisioning — DynamoDB tables, S3 buckets, IAM users and policies, credential management in `aws.properties` |
 
 ## Standard Feature Flow
 

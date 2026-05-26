@@ -1,9 +1,14 @@
 package com.espert.reporteciudadano.data.repository
 
+import app.cash.sqldelight.coroutines.asFlow
+import app.cash.sqldelight.coroutines.mapToList
+import app.cash.sqldelight.coroutines.mapToOneOrNull
 import com.espert.reporteciudadano.database.AppDatabase
 import com.espert.reporteciudadano.domain.model.*
 import com.espert.reporteciudadano.domain.repository.ReportRepository
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 
 class ReportRepositoryImpl(private val db: AppDatabase) : ReportRepository {
@@ -56,10 +61,39 @@ class ReportRepositoryImpl(private val db: AppDatabase) : ReportRepository {
         }
     }
 
+    override suspend fun getByIds(ids: List<String>): Result<List<CitizenReport>> = withContext(Dispatchers.Default) {
+        runCatching {
+            ids.mapNotNull { id ->
+                runCatching {
+                    val entity = db.appDatabaseQueries.getReportById(id).executeAsOneOrNull() ?: return@mapNotNull null
+                    val photos = db.appDatabaseQueries.getPhotosForReport(id).executeAsList()
+                        .map { p ->
+                            ReportPhoto(
+                                p.id,
+                                p.local_path,
+                                if (p.exif_latitude != null && p.exif_longitude != null)
+                                    GeoLocation(p.exif_latitude, p.exif_longitude)
+                                else null
+                            )
+                        }
+                    CitizenReport(
+                        id = entity.id,
+                        title = entity.title,
+                        description = entity.description,
+                        photos = photos,
+                        location = GeoLocation(entity.latitude, entity.longitude),
+                        status = ReportStatus.valueOf(entity.status),
+                        createdAt = entity.created_at
+                    )
+                }.getOrNull()
+            }
+        }
+    }
+
     override suspend fun getById(id: String): Result<CitizenReport> = withContext(Dispatchers.Default) {
         runCatching {
             val entity = db.appDatabaseQueries.getReportById(id).executeAsOne()
-            val photos = db.appDatabaseQueries.getPhotosForReport(id).executeAsList()
+            val photos = db.appDatabaseQueries.getPhotosForReport(entity.id).executeAsList()
                 .map { p ->
                     ReportPhoto(
                         p.id,
@@ -80,4 +114,60 @@ class ReportRepositoryImpl(private val db: AppDatabase) : ReportRepository {
             )
         }
     }
+
+    override fun observeAll(): Flow<List<CitizenReport>> =
+        db.appDatabaseQueries.getAllReports()
+            .asFlow()
+            .mapToList(Dispatchers.Default)
+            .map { entities ->
+                entities.map { entity ->
+                    val photos = db.appDatabaseQueries.getPhotosForReport(entity.id).executeAsList()
+                        .map { p ->
+                            ReportPhoto(
+                                p.id,
+                                p.local_path,
+                                if (p.exif_latitude != null && p.exif_longitude != null)
+                                    GeoLocation(p.exif_latitude, p.exif_longitude)
+                                else null
+                            )
+                        }
+                    CitizenReport(
+                        id = entity.id,
+                        title = entity.title,
+                        description = entity.description,
+                        photos = photos,
+                        location = GeoLocation(entity.latitude, entity.longitude),
+                        status = ReportStatus.valueOf(entity.status),
+                        createdAt = entity.created_at
+                    )
+                }
+            }
+
+    override fun observeById(id: String): Flow<CitizenReport?> =
+        db.appDatabaseQueries.getReportById(id)
+            .asFlow()
+            .mapToOneOrNull(Dispatchers.Default)
+            .map { entity ->
+                entity?.let {
+                    val photos = db.appDatabaseQueries.getPhotosForReport(it.id).executeAsList()
+                        .map { p ->
+                            ReportPhoto(
+                                p.id,
+                                p.local_path,
+                                if (p.exif_latitude != null && p.exif_longitude != null)
+                                    GeoLocation(p.exif_latitude, p.exif_longitude)
+                                else null
+                            )
+                        }
+                    CitizenReport(
+                        id = it.id,
+                        title = it.title,
+                        description = it.description,
+                        photos = photos,
+                        location = GeoLocation(it.latitude, it.longitude),
+                        status = ReportStatus.valueOf(it.status),
+                        createdAt = it.created_at
+                    )
+                }
+            }
 }

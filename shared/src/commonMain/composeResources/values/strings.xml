@@ -47,4 +47,14 @@
     <string name="no_location_on_photos_body">None of your photos have GPS coordinates. Please retake photos with location services enabled.</string>
     <string name="location_loading">Resolving location...</string>
     <string name="location_offline_label">Location (offline)</string>
+    <string name="sync_status_synced_cd">Synced to cloud</string>
+    <string name="sync_status_pending_cd">Sync pending</string>
+    <string name="sync_status_failed_cd">Sync failed</string>
+    <string name="sync_notification_channel_name">Sync Failures</string>
+    <string name="sync_notification_channel_desc">Alerts when a report could not be uploaded to the city server after repeated attempts.</string>
+    <string name="sync_notification_title">Sync failed</string>
+    <string name="sync_notification_body">Report &quot;%1$s&quot; could not be uploaded after 5 attempts. Tap to retry.</string>
+    <string name="sync_notification_action_retry">Retry Sync</string>
+    <string name="sync_snackbar_message">Sync failed for &quot;%1$s&quot;. Reopen the app when you are online to retry.</string>
+    <string name="sync_snackbar_action">Retry Sync</string>
 </resources>
