@@ -79,6 +79,7 @@ Specialized agents live in `.claude/agents/`. Use them for their designated conc
 | `ux-ui-designer` | UI/UX design proposals per feature |
 | `business-analyst` | User story authoring and requirements |
 | `migration-expert` | Dependency upgrades, version catalog management, breaking-change analysis across all KMP targets |
+| `aws-solutions-architect` | AWS infrastructure provisioning — DynamoDB tables, S3 buckets, IAM users and policies, credential management in `aws.properties` |
 
 ## Standard Feature Flow
 

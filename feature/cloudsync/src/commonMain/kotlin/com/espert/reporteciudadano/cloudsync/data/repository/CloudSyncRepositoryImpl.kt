@@ -11,7 +11,7 @@ import com.espert.reporteciudadano.domain.model.SyncStatus
 import com.espert.reporteciudadano.domain.repository.SyncStateRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import kotlinx.datetime.Clock
+import kotlin.time.Clock
 
 class CloudSyncRepositoryImpl(
     private val dynamoDbDataSource: DynamoDbDataSource,
