@@ -22,12 +22,13 @@ actual fun hmacSha256(key: ByteArray, data: ByteArray): ByteArray {
     return result
 }
 
-actual fun sha256Hex(data: String): String {
-    val bytes = data.encodeToByteArray()
+actual fun sha256Hex(data: String): String = sha256Hex(data.encodeToByteArray())
+
+actual fun sha256Hex(data: ByteArray): String {
     val result = ByteArray(CC_SHA256_DIGEST_LENGTH.toInt())
-    bytes.usePinned { pinnedBytes ->
+    data.usePinned { pinnedData ->
         result.usePinned { pinnedResult ->
-            CC_SHA256(pinnedBytes.addressOf(0), bytes.size.convert(), pinnedResult.addressOf(0))
+            CC_SHA256(pinnedData.addressOf(0), data.size.convert(), pinnedResult.addressOf(0))
         }
     }
     return result.toHex()

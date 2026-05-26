@@ -1,6 +1,7 @@
 package com.espert.reporteciudadano.cloudsync.worker
 
 import android.content.Context
+import android.util.Log
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.espert.reporteciudadano.cloudsync.domain.usecase.GetPendingSyncsUseCase
@@ -31,23 +32,43 @@ class CloudSyncWorker(
 
     override suspend fun doWork(): Result {
         return try {
-            val pendingRecords = getPendingSyncsUseCase().getOrElse {
-                return Result.retry() // DB or infrastructure failure
+            val pendingRecords = getPendingSyncsUseCase().getOrElse { e ->
+                Log.e(TAG, "getPendingSyncs failed: ${e.message}", e)
+                return Result.retry()
             }
 
+            Log.d(TAG, "doWork: ${pendingRecords.size} pending record(s)")
+
             for (record in pendingRecords) {
-                val report = reportRepository.getById(record.reportId).getOrNull() ?: continue
+                val report = reportRepository.getById(record.reportId).getOrNull() ?: run {
+                    Log.w(TAG, "report ${record.reportId} not found in local DB — skipping")
+                    continue
+                }
 
-                val syncResult = syncReportUseCase(report).getOrNull() ?: continue
+                val syncResult = syncReportUseCase(report)
+                syncResult.onFailure { e ->
+                    Log.e(TAG, "syncReportUseCase threw for ${report.id}: ${e.message}", e)
+                }
+                val result = syncResult.getOrNull() ?: continue
 
-                if (syncResult is SyncReportResult.Failed && syncResult.thresholdReached) {
-                    SyncFailureNotifier.notifySyncFailure(report.id, report.title)
+                when (result) {
+                    is SyncReportResult.Success ->
+                        Log.d(TAG, "synced ${report.id} successfully")
+                    is SyncReportResult.Failed -> {
+                        Log.w(TAG, "sync failed for ${report.id} threshold=${result.thresholdReached}")
+                        if (result.thresholdReached) SyncFailureNotifier.notifySyncFailure(report.id, report.title)
+                    }
                 }
             }
 
             Result.success()
         } catch (e: Exception) {
+            Log.e(TAG, "doWork threw unexpectedly: ${e.message}", e)
             Result.retry()
         }
+    }
+
+    companion object {
+        private const val TAG = "CloudSyncWorker"
     }
 }

@@ -16,6 +16,9 @@ fun ByteArray.toHex(): String = joinToString("") { "%02x".format(it) }
 /** SHA-256 of a String, returned as hex. */
 expect fun sha256Hex(data: String): String
 
+/** SHA-256 of raw bytes, returned as hex. Use this for binary payloads. */
+expect fun sha256Hex(data: ByteArray): String
+
 /**
  * AWS Signature Version 4 request signing.
  *
@@ -53,7 +56,7 @@ fun signAwsRequest(
     dateStamp: String,
     additionalHeaders: Map<String, String> = emptyMap()
 ): Map<String, String> {
-    val payloadHash = sha256Hex(payload.decodeToString())
+    val payloadHash = sha256Hex(payload)
 
     // Canonical headers: host + x-amz-date + x-amz-content-sha256 + any additional
     val canonicalHeadersMap = buildMap {

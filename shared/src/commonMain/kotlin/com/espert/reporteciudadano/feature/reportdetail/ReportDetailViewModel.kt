@@ -18,15 +18,20 @@ class ReportDetailViewModel(
     private val _state = MutableStateFlow(ReportDetailState())
     val state: StateFlow<ReportDetailState> = _state.asStateFlow()
 
+    private var geocodingTriggered = false
+
     init {
         viewModelScope.launch {
-            getReportById(reportId).fold(
-                onSuccess = { report ->
+            getReportById.observe(reportId)
+                .filterNotNull()
+                .catch { e -> _state.update { s -> s.copy(isLoading = false, error = e.message) } }
+                .collect { report ->
                     _state.update { s -> s.copy(report = report, isLoading = false) }
-                    resolveLocation(report.location.latitude, report.location.longitude)
-                },
-                onFailure = { e -> _state.update { s -> s.copy(isLoading = false, error = e.message) } }
-            )
+                    if (!geocodingTriggered) {
+                        geocodingTriggered = true
+                        resolveLocation(report.location.latitude, report.location.longitude)
+                    }
+                }
         }
     }
 

@@ -16,25 +16,23 @@ class MyReportsViewModel(
     private val _state = MutableStateFlow(MyReportsState())
     val state: StateFlow<MyReportsState> = _state.asStateFlow()
 
-    init { load() }
+    init { observeReports() }
 
     fun processIntent(intent: MyReportsIntent) {
         when (intent) {
             is MyReportsIntent.SelectReport -> { /* handled by callback */ }
-            MyReportsIntent.Refresh -> load()
+            MyReportsIntent.Refresh -> { /* no-op: Flow keeps the list live */ }
         }
     }
 
-    private fun load() {
+    private fun observeReports() {
         viewModelScope.launch {
-            _state.update { it.copy(isLoading = true, error = null) }
-            getAllReports().fold(
-                onSuccess = { reports ->
+            getAllReports.observe()
+                .catch { e -> _state.update { it.copy(isLoading = false, error = e.message) } }
+                .collect { reports ->
                     val syncStates = loadSyncStates()
                     _state.update { it.copy(reports = reports, isLoading = false, syncStates = syncStates) }
-                },
-                onFailure = { e -> _state.update { it.copy(isLoading = false, error = e.message) } }
-            )
+                }
         }
     }
 

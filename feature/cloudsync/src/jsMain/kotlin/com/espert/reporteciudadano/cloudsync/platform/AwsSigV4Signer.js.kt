@@ -12,5 +12,6 @@ package com.espert.reporteciudadano.cloudsync.platform
 actual fun hmacSha256(key: ByteArray, data: ByteArray): ByteArray =
     PureKotlinHmacSha256.compute(key, data)
 
-actual fun sha256Hex(data: String): String =
-    PureKotlinSha256.hex(data.encodeToByteArray())
+actual fun sha256Hex(data: String): String = PureKotlinSha256.hex(data.encodeToByteArray())
+
+actual fun sha256Hex(data: ByteArray): String = PureKotlinSha256.hex(data)

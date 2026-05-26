@@ -10,7 +10,8 @@ actual fun hmacSha256(key: ByteArray, data: ByteArray): ByteArray {
     return mac.doFinal(data)
 }
 
-actual fun sha256Hex(data: String): String {
-    val digest = MessageDigest.getInstance("SHA-256")
-    return digest.digest(data.encodeToByteArray()).toHex()
-}
+actual fun sha256Hex(data: String): String =
+    MessageDigest.getInstance("SHA-256").digest(data.encodeToByteArray()).toHex()
+
+actual fun sha256Hex(data: ByteArray): String =
+    MessageDigest.getInstance("SHA-256").digest(data).toHex()
