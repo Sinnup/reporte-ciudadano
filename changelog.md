@@ -9,6 +9,15 @@ Format: `[version] — YYYY-MM-DD`
 
 ## [Unreleased]
 
+### Fixed — 2026-05-26
+
+- **FEAT-013 — Eager sync trigger**: `ReportFormViewModel.onReportSaved` callback wired to `SyncScheduler.scheduleEagerSync()` in `ReporteCiudadanoApp` so a sync job is enqueued immediately after the citizen submits a report, without waiting for the next periodic background window.
+- **FEAT-013 — Reactive UI**: `ReportRepository` gained `observeAll()` and `observeById()` Flow APIs backed by SQLDelight `asFlow()`; `MyReportsViewModel` and `ReportDetailViewModel` switched from one-shot loads to reactive Flow collection so the My Reports list and Report Detail screen update instantly when sync state changes.
+- **FEAT-013 — S3 SHA256 binary signing**: added a `sha256Hex(ByteArray)` overload on all platforms; `signAwsRequest` now hashes the raw byte array instead of calling `decodeToString()` first, fixing the `XAmzContentSHA256Mismatch` error that was rejecting binary JPEG uploads.
+- **FEAT-013 — Sync logging**: structured Logcat output added to `CloudSyncWorker` (`TAG=CloudSyncWorker`) covering sync start, per-report outcomes, and final success/failure counts.
+- **FEAT-013 — `aws.properties` placement**: file placed at `androidApp/src/main/assets/aws.properties` with the exact property keys (`aws.dynamodb.tableName`, `aws.s3.bucketName`) that `AwsCredentialsProvider.android.kt` reads at runtime.
+- **FEAT-013 — `FakeReportRepository` test fix**: `FakeReportRepository` backed by `MutableStateFlow` so tests can observe Flow emissions from `observeAll()` and `observeById()`.
+
 ### Added — 2026-05-26
 
 - **AWS Infrastructure** — Provisioned production AWS resources for FEAT-013 cloud sync: DynamoDB table `reporte-ciudadano-reports` (us-east-1, on-demand billing, partition key `id: String`) and S3 bucket `reporte-ciudadano-photos` (us-east-1, all public access blocked, object key format `reports/<reportId>/<filename>`). IAM user `reporte-ciudadano-app` created with a least-privilege inline policy scoped to exact ARNs — `PutItem`/`GetItem`/`DescribeTable` on the DynamoDB table and `PutObject`/`GetObject`/`HeadObject`/`ListBucket` on the S3 bucket; no root credentials used. `aws.properties` added to `.gitignore` so credentials are never committed. New `aws-solutions-architect` agent added to `.claude/agents/` documenting the full resource inventory, access patterns, IAM policy, credential rotation procedure, and a future migration path to Cognito Identity Pools.
