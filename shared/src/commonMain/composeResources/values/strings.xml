@@ -57,4 +57,5 @@
     <string name="sync_notification_action_retry">Retry Sync</string>
     <string name="sync_snackbar_message">Sync failed for &quot;%1$s&quot;. Reopen the app when you are online to retry.</string>
     <string name="sync_snackbar_action">Retry Sync</string>
+    <string name="no_report_selected">Select a report to view its details</string>
 </resources>

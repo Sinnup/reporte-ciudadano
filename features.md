@@ -1386,6 +1386,420 @@ The `SyncStatusIcon` is an 18dp `Icon` — it is readable and non-intrusive at a
 
 ---
 
+### [FEAT-014] Tablet & Large-Screen Adaptive Layout
+
+**Status**: `Done`
+
+**Architect Notes**
+
+No adaptive layout exists anywhere in the codebase. Every screen uses a `Scaffold` with a bottom `NavigationBar` and a single-column content area that stretches to fill the full display width. On Android tablets, iPad, and wide browser windows this produces an unusable layout: oversized text fields, a bottom navigation rail that violates Material3 large-screen guidelines, and no use of the available horizontal space.
+
+**Window Size API.** Compose Multiplatform 1.11.0 bundles `androidx.compose.material3.adaptive` in its `commonMain` umbrella. The correct API is `currentWindowAdaptiveInfo(): WindowAdaptiveInfo` with `WindowWidthSizeClass`. No `expect/actual` is required. A new library entry must be added to `libs.versions.toml`:
+
+```toml
+[versions]
+material3-adaptive = "1.1.0"
+[libraries]
+compose-material3-adaptive = { module = "org.jetbrains.compose.material3:material3-adaptive", version.ref = "material3-adaptive" }
+```
+
+**Navigation chrome.** On `Compact` width (< 600dp) the existing `NavigationBar` at the bottom is unchanged. On `Medium` and `Expanded` (>= 600dp) `MainScreen` switches to a `NavigationRail` on the left edge. A boolean `isExpandedWidth()` helper in a new `ui/adaptive/WindowSizeExt.kt` drives the switch. `App.kt` reads `isExpandedWidth()` once at the root composable and passes it down to `MainScreen` as `useRail: Boolean`.
+
+**Two-pane split on Expanded (> 840dp).** Two screens benefit from a side-by-side master–detail layout:
+
+1. `MyReportsScreen` (left, weight 0.4f) + `ReportDetailScreen` (right, weight 0.6f). The selected report ID is held in `MyReportsState.selectedReportId: String?`. Two new intents are added to `MyReportsIntent`: `SelectReport(id: String)` and `ClearSelection`. On Compact the existing `onReportSelected` lambda navigates via `AppViewModel`; on Expanded it dispatches `SelectReport` into the ViewModel and the detail renders inline.
+
+2. `ReportsMapScreen` (left, weight 0.6f) + `ReportDetailScreen` (right, weight 0.4f). The selected report ID is held in `ReportsMapState.selectedReportId: String?`. A new `ReportsMapIntent` sealed class is introduced with `SelectPin(reportId: String)` and `ClearSelection`. Currently no Intent class exists for this screen — it is created fresh by this feature.
+
+On Expanded, `AppViewModel` must NOT push `NavDestination.ReportDetail` for list/map taps — the routing logic in `App.kt` passes a no-op `onReportSelected` on the Expanded path; each screen's ViewModel handles its own selection state internally.
+
+**Modal flows on wide viewports.** Camera, PhotoReview, ReportForm, and ThankYou screens remain full-screen single-column flows. On Expanded widths their root content column is constrained to `widthIn(max = 600.dp)` and horizontally centred. The `Scaffold` still fills the full width; only the inner content column is narrowed. No ViewModel or State changes are needed for these screens.
+
+**Empty-state placeholder.** A new stateless composable `NoSelectionPlaceholder` in `ui/adaptive/NoSelectionPlaceholder.kt` is shown in the right detail pane when no report is selected. It renders a centred icon and the new string key `no_report_selected`.
+
+**Layers affected:**
+- Presentation: `MainScreen`, `MyReportsScreen`, `ReportsMapScreen`, `App.kt` — layout changes only
+- Domain: none
+- Data: none
+- State: `MyReportsState` gains `selectedReportId: String?`; `ReportsMapState` gains `selectedReportId: String?`
+- Intent: `MyReportsIntent` gains `SelectReport` + `ClearSelection`; `ReportsMapIntent` is a new sealed class
+
+**New files:**
+- `shared/src/commonMain/kotlin/.../ui/adaptive/WindowSizeExt.kt`
+- `shared/src/commonMain/kotlin/.../ui/adaptive/NoSelectionPlaceholder.kt`
+
+**New string keys:** `no_report_selected` (EN: "Select a report to view its details" / ES: "Selecciona un reporte para ver sus detalles")
+
+**Module placement:** All within `:shared` `commonMain`. No new Gradle submodule. No module dependency cycles. The `ReportsMapViewModel` needs a `processIntent` method — currently absent, introduced by this feature.
+
+**Koin:** No changes. `MyReportsViewModel` and `ReportsMapViewModel` are already bound. The new State fields and Intents are picked up automatically.
+
+**Platform notes:**
+- Android phones: always `Compact`; unchanged.
+- Android tablets (7–10"): `Medium` to `Expanded`; NavigationRail + two-pane on 10"+.
+- iPad: `Expanded` on 12.9" Pro, `Medium` on 11"; NavigationRail on both; two-pane on `Expanded`.
+- Web browser: `Expanded` when > 840px; resize triggers reactive recomposition via `currentWindowAdaptiveInfo()`.
+
+**ViewModel scoping caveat:** `selectedReportId` persists in ViewModel state across tab switches (Activity scoping). The `ClearSelection` intent must be dispatched when the user switches away from the My Reports or Map tab to prevent stale detail content.
+
+**User Story** *(Business Analyst)*
+> As a citizen using ReporteCiudadano on a tablet, iPad, or wide browser window,
+> I want the app layout to adapt to the available screen width so that I can navigate using a side rail, browse my reports and see their details side by side, and view the map alongside a selected report's details — without any change to the experience on my phone.
+
+**Acceptance Criteria**
+
+**Phone / Compact width (< 600dp) — no regression**
+
+- [ ] Given a citizen opens the app on a phone (window width < 600dp), when any tab is active, then the bottom `NavigationBar` with three tabs ("Report", "My Reports", "Reports Map") is displayed exactly as before this feature — no `NavigationRail` appears and no layout change is visible.
+- [ ] Given a citizen is on a phone, when they tap a report card in My Reports or a pin on the Reports Map, then the app navigates to the Report Detail screen as a full-screen push — no side-by-side panel is shown.
+- [ ] Given a citizen is on a phone, when they go through the Camera, PhotoReview, ReportForm, or ThankYou flows, then each screen fills the full display width with no width capping — behaviour is identical to the pre-FEAT-014 build.
+
+**Navigation chrome — tablet / wide screen (>= 600dp)**
+
+- [ ] Given a citizen opens the app on a device with window width >= 600dp (tablet, iPad, or wide browser window), when the main screen renders, then the bottom `NavigationBar` is replaced by a `NavigationRail` on the left edge with the same three destinations ("Report", "My Reports", "Reports Map").
+- [ ] Given the `NavigationRail` is visible, when the citizen taps any destination, then the corresponding tab screen replaces the content area to the right of the rail — switching tabs works identically to the bottom-bar version.
+- [ ] Given the `NavigationRail` is visible, when the active tab is highlighted, then the active rail item is visually distinct from the inactive items using Material3 `NavigationRailItem` selected state indicators.
+
+**My Reports — two-pane master–detail (>= 840dp)**
+
+- [ ] Given a citizen opens My Reports on a device with window width >= 840dp, when the screen renders, then the report list occupies the left pane (weight 0.4f) and the right pane (weight 0.6f) shows the `NoSelectionPlaceholder` composable with the text "Select a report to view its details" until a report is selected.
+- [ ] Given the two-pane My Reports layout is active, when the citizen taps a report card, then `MyReportsIntent.SelectReport(id)` is dispatched, the tapped card becomes visually selected in the list, and `ReportDetailScreen` renders inline in the right pane — no full-screen navigation occurs.
+- [ ] Given a report is displayed in the right pane of My Reports, when the citizen taps a different report card in the left pane, then the right pane immediately updates to show the newly selected report's details.
+- [ ] Given the two-pane My Reports layout is active, when the citizen switches to a different tab (e.g. "Reports Map"), then `MyReportsIntent.ClearSelection` is dispatched, and returning to My Reports shows the `NoSelectionPlaceholder` again — no stale detail remains.
+
+**Reports Map — two-pane map + detail (>= 840dp)**
+
+- [ ] Given a citizen opens Reports Map on a device with window width >= 840dp, when the screen renders, then the map occupies the left pane (weight 0.6f) and the right pane (weight 0.4f) shows the `NoSelectionPlaceholder` composable with the text "Select a report to view its details" until a pin is tapped.
+- [ ] Given the two-pane Reports Map layout is active, when the citizen taps a report pin on the map, then `ReportsMapIntent.SelectPin(reportId)` is dispatched and `ReportDetailScreen` renders inline in the right pane — no full-screen navigation occurs.
+- [ ] Given a report detail is displayed in the right pane of Reports Map, when the citizen taps a different pin, then the right pane immediately updates to show the newly selected report's details.
+- [ ] Given the two-pane Reports Map layout is active, when the citizen switches to a different tab (e.g. "My Reports"), then `ReportsMapIntent.ClearSelection` is dispatched, and returning to Reports Map shows the `NoSelectionPlaceholder` again.
+
+**Modal flows — centred and capped on wide viewports**
+
+- [ ] Given a citizen initiates the Report flow (Camera, PhotoReview, ReportForm, ThankYou) on a device with window width >= 600dp, when any of those screens renders, then the inner content column is constrained to a maximum width of 600dp and horizontally centred within the `Scaffold` — the scaffold background fills the full display width but the form content does not stretch beyond 600dp.
+- [ ] Given the 600dp cap is applied to modal flow screens, when the citizen interacts with any form field, button, or camera control on those screens, then all touch targets remain within the centred content column and no functionality is lost compared to the phone layout.
+
+**Empty-state placeholder**
+
+- [ ] Given no report is selected in either the My Reports or Reports Map two-pane layout, when the right detail pane renders, then the `NoSelectionPlaceholder` composable is shown with a centred icon and the string `no_report_selected` ("Select a report to view its details" in English, "Selecciona un reporte para ver sus detalles" in Spanish).
+- [ ] Given the `NoSelectionPlaceholder` is displayed, when the citizen selects a report, then the placeholder is replaced by `ReportDetailScreen` without any visible flash or intermediate loading state beyond the normal detail load.
+
+**Responsive recomposition — browser resize**
+
+- [ ] Given the app is running in a web browser, when the citizen resizes the browser window from a width below 600dp to a width above 600dp (or vice versa), then the layout transitions reactively between `NavigationBar` and `NavigationRail` without requiring a page reload.
+- [ ] Given the app is running in a web browser at width >= 840dp, when the citizen resizes the window below 840dp, then the two-pane split collapses to single-column navigation and any previously selected report ID is cleared so no orphaned detail panel remains.
+
+**UX/UI Proposal** *(Designer — approved)*
+
+FEAT-014 introduces no new screens in the traditional sense. It reshapes three existing screens (`MainScreen`, `MyReportsScreen`, `ReportsMapScreen`) and adds one new stateless composable (`NoSelectionPlaceholder`). Modal flows (Camera, PhotoReview, ReportForm, ThankYou) receive only a width constraint. Every design decision is driven by Material3 adaptive layout guidelines and Compose Multiplatform constraints shared across Android, iOS, and Web.
+
+---
+
+### Breakpoint Reference
+
+| Class | Width | Layout mode |
+|---|---|---|
+| `Compact` | < 600dp | Bottom `NavigationBar`, single-column content |
+| `Medium` | 600dp – 839dp | `NavigationRail` on left, single-column content |
+| `Expanded` | >= 840dp | `NavigationRail` on left, two-pane content (My Reports + Map only) |
+
+The switch between `NavigationBar` and `NavigationRail` is driven by `isExpandedWidth()` (returns true when `WindowWidthSizeClass >= Medium`). The two-pane split activates only at `Expanded`.
+
+---
+
+### Screen 1 — MainScreen: NavigationRail (Medium + Expanded)
+
+**Purpose**: replace the bottom tab bar with a vertical navigation rail that frees horizontal real estate and matches Material3 large-screen conventions.
+
+**Layout**: `Row` fills the full screen. The `NavigationRail` occupies the left edge; the content area fills the remaining width using `Modifier.weight(1f)`.
+
+```
+Row(fillMaxSize)
+  NavigationRail                     ← fixed left edge, 80dp wide
+    NavigationRailItem (Report)
+    NavigationRailItem (My Reports)
+    NavigationRailItem (Map)
+  Box(weight = 1f)                   ← tab content area
+    when (selectedTab) { ... }
+```
+
+**Rail dimensions and treatment:**
+- Width: 80dp (Material3 `NavigationRail` default — do not override)
+- Each `NavigationRailItem` uses icon + label (`alwaysShowLabel = true`) for discoverability; icon above label (standard M3 rail item vertical layout)
+- Selected indicator: the M3 default pill indicator on the icon, `secondaryContainer` fill — matches the existing `NavigationBar` selected state token, so the visual language is consistent across breakpoints
+- `containerColor`: `MaterialTheme.colorScheme.surface` — the rail surface blends with the tab content background; no custom elevation shadow needed
+- A `HorizontalDivider` is NOT placed between the rail and content: M3 large-screen guidance uses surface color differentiation (the rail sits on `surface`, content area on `background`/`surface`) rather than explicit dividers. The existing theme already distinguishes these via `ElevatedCard` tonal elevation in the content area.
+- The `Scaffold`'s `bottomBar` slot is empty (`{}`) when in rail mode; only the `Scaffold` content area is used, and the `Row` with rail + content fills it
+
+**Icons and labels**: same icons as the existing `NavigationBar` — `AddCircle` / `List` / `LocationOn`. Same string resource keys — `tab_report`, `tab_my_reports`, `tab_map`. No new keys needed.
+
+**States**: the rail has no loading/error/empty state; it mirrors the existing bottom bar (always rendered).
+
+**Navigation**: entry via `App.kt` passing `useRail: Boolean` to `MainScreen`; exit is within-tab navigation unchanged.
+
+---
+
+### Screen 2 — My Reports Two-Pane (Expanded, >= 840dp)
+
+**Purpose**: let citizens browse their report list and read a full report detail simultaneously, without a navigation push that loses list context.
+
+**Layout**: `Row(fillMaxSize)` split into left pane (list, `weight = 0.4f`) and right pane (detail or placeholder, `weight = 0.6f`). A single `VerticalDivider` (1dp, `outlineVariant` color) separates the panes for visual grounding.
+
+```
+Row(fillMaxSize)
+  ┌── Left pane (weight 0.4f) ──────────────────┐
+  │  CenterAlignedTopAppBar("My Reports")        │
+  │  LazyColumn                                  │
+  │    ElevatedCard (each report, selectable)    │
+  └──────────────────────────────────────────────┘
+  VerticalDivider(1dp, outlineVariant)
+  ┌── Right pane (weight 0.6f) ─────────────────┐
+  │  if selectedReportId == null:                │
+  │    NoSelectionPlaceholder                    │
+  │  else:                                       │
+  │    ReportDetailScreen(reportId, onBack={})   │
+  └──────────────────────────────────────────────┘
+```
+
+**Selected card highlight**: when a report is selected (`state.selectedReportId == reportId`), the card uses `CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)` instead of the default elevated card surface. The `StatusChip` and `SyncStatusIcon` remain unchanged inside the card. This keeps the selection state legible without requiring a custom drawn indicator — `secondaryContainer` is already the M3 selected indicator color used by `NavigationRailItem` and `NavigationBarItem`, so citizens learn one selection language across the app.
+
+**Top app bar placement**: the `CenterAlignedTopAppBar` lives only over the left list pane. The right pane renders `ReportDetailScreen` whose own `CenterAlignedTopAppBar` ("Report Detail", back arrow) is present but the back arrow is hidden (`navigationIcon = {}`) in two-pane mode — the citizen never navigates "back" from an embedded detail; they simply tap another list item.
+
+**Intent flow**: tapping a card dispatches `MyReportsIntent.SelectReport(id)`. Switching away from the My Reports tab dispatches `MyReportsIntent.ClearSelection` (the `MainScreen` level handles this on tab change via a `LaunchedEffect(selectedTab)` that calls `onClearSelection()` when leaving the MY_REPORTS tab).
+
+**States**:
+- Loading (left pane): `CircularProgressIndicator` centered in the left pane (unchanged from current phone layout)
+- Empty (left pane): centered `no_reports_message` text (unchanged)
+- Populated, no selection: list in left pane, `NoSelectionPlaceholder` in right pane
+- Populated, report selected: list with highlighted card in left pane, `ReportDetailScreen` in right pane
+
+**ASCII wireframe — Expanded, report selected:**
+
+```
+┌───────────────────────────────────────────────────────────────────────────┐
+│ [NavigationRail]  │  My Reports                                           │
+│                   │──────────────────────────────────────────────────────│
+│  [AddCircle]      │ ┌──────────────────────────┐  │                      │
+│  Report           │ │ Crack near bus stop       │  │  Report Detail       │
+│                   │ │ [✓☁]         [SEEN]       │  │──────────────────── │
+│  [List] ●         │ └──────────────────────────┘  │  [ photo ][ photo ] →│
+│  My Reports       │                                │                      │
+│                   │ ┌──────────────────────────┐  │  [SEEN chip]         │
+│  [LocationOn]     │ │ Pothole on main avenue    │  │  Crack near bus stop │
+│  Map              │ │ (secondaryContainer fill) │  │  There is a large... │
+│                   │ │ [↑☁]         [SENT]       │  │                      │
+│                   │ └──────────────────────────┘  │  ┌─────────────────┐ │
+│                   │                                │  │[LocationOn] Av. │ │
+│                   │ ┌──────────────────────────┐  │  │Independencia 45 │ │
+│                   │ │ Flooding in park          │  │  └─────────────────┘ │
+│                   │ │ [!↻]         [SENT]       │  │                      │
+│                   │ └──────────────────────────┘  │                      │
+│                   │                                │                      │
+└───────────────────────────────────────────────────────────────────────────┘
+ 80dp               0.4f content                 1dp  0.6f content
+```
+
+---
+
+### Screen 3 — Reports Map Two-Pane (Expanded, >= 840dp)
+
+**Purpose**: display the full map alongside a selected pin's report detail, so citizens can correlate geography and report content without losing the map view.
+
+**Layout**: `Row(fillMaxSize)` with the map taking `weight = 0.6f` and the detail pane taking `weight = 0.4f`. The map always fills its pane completely (no top bar overlay in two-pane mode — see below). The same `VerticalDivider` (1dp, `outlineVariant`) separates panes.
+
+```
+Row(fillMaxSize)
+  ┌── Map pane (weight 0.6f) ───────────────────┐
+  │  Box(fillMaxSize)                            │
+  │    MapView(fillMaxSize)                      │
+  │    CenterAlignedTopAppBar overlay            │
+  │      ("Reports Map", surface 85% alpha)      │
+  └──────────────────────────────────────────────┘
+  VerticalDivider(1dp, outlineVariant)
+  ┌── Detail pane (weight 0.4f) ────────────────┐
+  │  if selectedReportId == null:                │
+  │    NoSelectionPlaceholder                    │
+  │  else:                                       │
+  │    ReportDetailScreen(reportId, onBack={})   │
+  └──────────────────────────────────────────────┘
+```
+
+**Map pane treatment**: the existing semi-transparent `CenterAlignedTopAppBar` overlay (`surface.copy(alpha = 0.85f)`) remains in the map pane. It is wide enough on a 0.6f pane at 840dp+ (approximately 504dp) to be legible. The overlay sits entirely within the map pane, not across both panes.
+
+**Pin selection treatment**: tapping a map pin dispatches `ReportsMapIntent.SelectPin(reportId)`. There is no visual highlight on the map pin itself beyond the standard `Marker` press behavior (OSMDroid shows a brief info window click animation). The selection acknowledgement is communicated by the right pane immediately rendering the report detail — the response is instant enough to be understood without a secondary pin color change. This avoids a platform-specific pin color management concern on OSMDroid.
+
+**Back arrow in embedded detail**: same as My Reports two-pane — the `navigationIcon` slot of the `ReportDetailScreen`'s `TopAppBar` is hidden (`navigationIcon = {}`) when rendered in the right pane. Citizens switch detail content by tapping different pins, not by pressing Back.
+
+**States**:
+- Loading (map pane): `CircularProgressIndicator` centered in the map pane (unchanged from current phone layout)
+- Loaded, no selection: map with pins in left pane, `NoSelectionPlaceholder` in right pane
+- Loaded, pin selected: map with pins in left pane, `ReportDetailScreen` in right pane
+
+**ASCII wireframe — Expanded, pin selected:**
+
+```
+┌───────────────────────────────────────────────────────────────────────────┐
+│ [NavigationRail]  │                                                        │
+│                   │  Reports Map (semi-transparent bar)                    │
+│  [AddCircle]      │──────────────────────────────────┤                    │
+│  Report           │                                  │  Report Detail      │
+│                   │   [map tiles, streets, pins ●]   │─────────────────── │
+│  [List]           │                                  │  [ photo ][ photo ]→│
+│  My Reports       │         ● (selected pin)         │                     │
+│                   │       ●       ●                  │  [SENT chip]        │
+│  [LocationOn] ●   │                 ●                │  Pothole near park  │
+│  Map              │   ●                              │  Deep hole on the...│
+│                   │                                  │                     │
+│                   │                                  │  ┌───────────────┐  │
+│                   │                                  │  │[LocationOn]   │  │
+│                   │                                  │  │18.4861° N,    │  │
+│                   │                                  │  │69.9312° W     │  │
+│                   │                                  │  └───────────────┘  │
+└───────────────────────────────────────────────────────────────────────────┘
+ 80dp               0.6f map pane                  1dp  0.4f detail pane
+```
+
+---
+
+### New Composable — NoSelectionPlaceholder
+
+**Purpose**: fill the right detail pane when no report has been selected yet. It communicates the expected interaction ("tap a report or pin to see details here") without cluttering the space or creating visual tension with the list/map in the left pane.
+
+**File**: `shared/src/commonMain/kotlin/com/espert/reporteciudadano/ui/adaptive/NoSelectionPlaceholder.kt`
+
+**Layout**:
+
+```
+Box(fillMaxSize, contentAlignment = Center)
+  Column(horizontalAlignment = CenterHorizontally, spacedBy(12.dp))
+    Icon(Icons.Default.TouchApp, size = 48.dp, tint = onSurfaceVariant)
+    Text(stringResource(Res.string.no_report_selected),
+         style = bodyLarge,
+         color = onSurfaceVariant,
+         textAlign = Center,
+         modifier = Modifier.padding(horizontal = 32.dp))
+```
+
+**Icon choice**: `Icons.Default.TouchApp` — the hand-with-pointer icon communicates "tap to interact" in a universally understood gesture metaphor. It is available in `androidx.compose.material.icons.filled` without extended icons. It does not conflict with any icon already used in the app (`LocationOn`, `LocationOff`, `GpsOff`, `CloudDone`, `CloudUpload`, `SyncProblem`, `AddCircle`, `List`).
+
+**Color treatment**: both icon and text use `MaterialTheme.colorScheme.onSurfaceVariant` — the standard M3 placeholder / hint color, consistent with empty-state text in `OutlinedTextField` and the location loading label in `LocationDisplayCard`. This signals "waiting for input" without drawing attention away from the actionable left pane.
+
+**Size**: icon at 48dp matches the `LocationOff` icon size used in `LocationDisabledContent` (FEAT-010), maintaining a consistent "instructional empty state" icon weight across the app.
+
+**String key**: `no_report_selected` — already specified by the Architect Notes. No new keys added by the designer.
+
+**States**: this composable is stateless. It has exactly one visual state — there is no loading, error, or interactive variant.
+
+**Navigation**: no entry or exit points; it is conditionally rendered by `MyReportsScreen` and `ReportsMapScreen` based on `selectedReportId == null`.
+
+**ASCII wireframe:**
+
+```
+┌──────────────────────────────────┐
+│                                  │
+│                                  │
+│                                  │
+│          [TouchApp]              │  ← 48dp, onSurfaceVariant
+│                                  │
+│    Select a report to view       │  ← bodyLarge, onSurfaceVariant
+│        its details               │     centered, 32dp horizontal padding
+│                                  │
+│                                  │
+└──────────────────────────────────┘
+```
+
+---
+
+### Modal Flows — Width Cap on Wide Viewports (>= 600dp)
+
+**Purpose**: prevent ReportForm, PhotoReview, Camera, and ThankYou screens from becoming uncomfortably wide on tablets and browsers, while keeping the `Scaffold` full-width for correct background fill.
+
+**Affected screens**: `ReportFormScreen`, `PhotoReviewScreen`, `ThankYouScreen`, and the camera-flow screens (`CameraScreen`, `LocationDisabledContent`).
+
+**Approach**: each screen's root `Scaffold` fills the full display width normally. The inner content column — the direct child of the `Scaffold`'s content lambda receiving `padding` — gains `Modifier.widthIn(max = 600.dp).align(Alignment.TopCenter)` inside a `Box(fillMaxSize)`. The `Scaffold` background color still fills wall-to-wall; only the readable content column is narrowed.
+
+**Gutter treatment**: the space outside the 600dp content column inherits the `Scaffold` container color, which is `MaterialTheme.colorScheme.surface` by default. No custom background color is applied; the theme handles it. On light mode this renders as `#F8FAF7` (off-white); on dark mode as `#1A1C1A`. Both are neutral enough to frame the centered content column without distraction.
+
+**Bottom bar**: the `Scaffold`'s `bottomBar` (Submit button in `ReportFormScreen`, Continue button in `PhotoReviewScreen`) fills the full scaffold width by default. Apply the same `widthIn(max = 600.dp).align(Alignment.CenterHorizontally)` pattern inside the bottom bar's `Box` so the button also stays within the 600dp column. This prevents a full-width button on a 1200dp browser window.
+
+**No ViewModel changes**: this is a pure layout modifier change. State, intents, and navigation are unaffected.
+
+**ASCII wireframe — ReportFormScreen on wide viewport:**
+
+```
+┌──────────────────────────────────────────────────────────────────────┐
+│ [NavigationRail]  │  surface color gutter                            │
+│                   │   ┌─────────────────────────────────┐            │
+│  [AddCircle] ●    │   │  [X]       New Report           │ ← TopAppBar│
+│  Report           │   ├─────────────────────────────────┤            │
+│                   │   │  [ photo ][ photo ][ photo ]    │            │
+│  [List]           │   │                                 │            │
+│  My Reports       │   │  ┌───────────────────────────┐  │            │
+│                   │   │  │ Title *              0/100 │  │            │
+│  [LocationOn]     │   │  └───────────────────────────┘  │            │
+│  Map              │   │  ┌───────────────────────────┐  │            │
+│                   │   │  │ Description *        0/500 │  │            │
+│                   │   │  │                            │  │            │
+│                   │   │  └───────────────────────────┘  │            │
+│                   │   │  ┌───────────────────────────┐  │            │
+│                   │   │  │[LocationOn]  Resolving... │  │            │
+│                   │   │  └───────────────────────────┘  │            │
+│                   │   ├─────────────────────────────────┤            │
+│                   │   │  [      Submit Report       ]   │ ← bottomBar│
+│                   │   └─────────────────────────────────┘            │
+│                   │  surface color gutter                            │
+└──────────────────────────────────────────────────────────────────────┘
+ 80dp                                  max 600dp content column
+```
+
+---
+
+### New String Keys
+
+The only new string key introduced by this feature's UX is defined by the Architect Notes: `no_report_selected`. The designer confirms the proposed copy and adds the Spanish value for completeness.
+
+| Key | English value | Spanish value |
+|---|---|---|
+| `no_report_selected` | Select a report to view its details | Selecciona un reporte para ver sus detalles |
+
+No other string keys are needed. The rail navigation items reuse `tab_report`, `tab_my_reports`, and `tab_map` — all already present in `strings.xml`.
+
+---
+
+### Material3 Component Summary
+
+| Surface | Component | Role |
+|---|---|---|
+| `MainScreen` (rail mode) | `NavigationRail` | Vertical navigation container replacing `NavigationBar` |
+| `MainScreen` (rail mode) | `NavigationRailItem` × 3 | Destination items, `alwaysShowLabel = true` |
+| My Reports two-pane | `Row` | Horizontal pane split container |
+| My Reports two-pane | `VerticalDivider` | Visual separator between list and detail panes |
+| My Reports two-pane | `CardDefaults.cardColors(secondaryContainer)` | Selected card highlight |
+| Reports Map two-pane | `Row` | Horizontal pane split container |
+| Reports Map two-pane | `VerticalDivider` | Visual separator between map and detail panes |
+| `NoSelectionPlaceholder` | `Icon` (`TouchApp`) | Instructional empty-state icon |
+| `NoSelectionPlaceholder` | `Text` | Instructional copy |
+| Modal flows (wide) | `Box` + `widthIn(max = 600.dp)` | Content column width cap |
+
+---
+
+### State and Navigation Summary
+
+| Screen | Compact behavior | Medium behavior | Expanded behavior |
+|---|---|---|---|
+| `MainScreen` | `NavigationBar` bottom | `NavigationRail` left | `NavigationRail` left |
+| `MyReportsScreen` | single-column list, tap → push detail | single-column list, tap → push detail | two-pane list + detail, tap → inline detail |
+| `ReportsMapScreen` | full-screen map, pin tap → push detail | full-screen map, pin tap → push detail | two-pane map + detail, pin tap → inline detail |
+| `ReportFormScreen` | full width | 600dp max centered | 600dp max centered |
+| `ReportDetailScreen` (embedded) | n/a | n/a | no back arrow, fills right pane |
+| `NoSelectionPlaceholder` | never shown | never shown | right pane when no selection |
+
+---
+
+**Status**: `Ready`
+
+---
+
 ## Template (for new features)
 
 ### [FEAT-000] Feature Title

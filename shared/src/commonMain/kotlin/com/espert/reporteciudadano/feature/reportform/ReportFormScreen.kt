@@ -9,6 +9,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
@@ -47,10 +48,16 @@ fun ReportFormScreen(
     }
 
     Scaffold(
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             CenterAlignedTopAppBar(
                 title = { Text(stringResource(Res.string.new_report_title)) },
-                navigationIcon = { IconButton(onClick = onCancel) { Icon(Icons.Default.Close, stringResource(Res.string.cancel_content_description)) } }
+                windowInsets = WindowInsets(0, 0, 0, 0),
+                navigationIcon = {
+                    IconButton(onClick = onCancel) {
+                        Icon(Icons.Default.Close, stringResource(Res.string.cancel_content_description))
+                    }
+                }
             )
         },
         bottomBar = {
@@ -66,46 +73,57 @@ fun ReportFormScreen(
             }
         }
     ) { padding ->
-        Column(
-            Modifier.padding(padding).fillMaxSize().verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            Spacer(Modifier.height(8.dp))
-            LazyRow(
-                contentPadding = PaddingValues(horizontal = 16.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+        // On wide viewports, cap the content column at 600dp and centre it.
+        // The Scaffold fills the full width; only the inner column is constrained.
+        Box(Modifier.padding(padding).fillMaxSize()) {
+            Column(
+                modifier = Modifier
+                    .widthIn(max = 600.dp)
+                    .align(Alignment.TopCenter)
+                    .fillMaxHeight()
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                items(photos) { photo ->
-                    AsyncImage(
-                        model = photo.localPath,
-                        contentDescription = null,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.size(120.dp)
+                Spacer(Modifier.height(8.dp))
+                LazyRow(
+                    contentPadding = PaddingValues(horizontal = 16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(photos) { photo ->
+                        AsyncImage(
+                            model = photo.localPath,
+                            contentDescription = null,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.size(120.dp)
+                        )
+                    }
+                }
+                Column(
+                    Modifier.padding(horizontal = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedTextField(
+                        value = state.title,
+                        onValueChange = { viewModel.processIntent(ReportFormIntent.TitleChanged(it)) },
+                        label = { Text(stringResource(Res.string.title_field_label)) },
+                        supportingText = { Text("${state.title.length}/100") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = state.description,
+                        onValueChange = { viewModel.processIntent(ReportFormIntent.DescriptionChanged(it)) },
+                        label = { Text(stringResource(Res.string.description_field_label)) },
+                        supportingText = { Text("${state.description.length}/500") },
+                        minLines = 3,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    LocationDisplayCard(
+                        locationDisplay = state.locationDisplay,
+                        modifier = Modifier.fillMaxWidth()
                     )
                 }
+                Spacer(Modifier.height(8.dp))
             }
-            Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(
-                    value = state.title,
-                    onValueChange = { viewModel.processIntent(ReportFormIntent.TitleChanged(it)) },
-                    label = { Text(stringResource(Res.string.title_field_label)) },
-                    supportingText = { Text("${state.title.length}/100") },
-                    modifier = Modifier.fillMaxWidth()
-                )
-                OutlinedTextField(
-                    value = state.description,
-                    onValueChange = { viewModel.processIntent(ReportFormIntent.DescriptionChanged(it)) },
-                    label = { Text(stringResource(Res.string.description_field_label)) },
-                    supportingText = { Text("${state.description.length}/500") },
-                    minLines = 3,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                LocationDisplayCard(
-                    locationDisplay = state.locationDisplay,
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
-            Spacer(Modifier.height(8.dp))
         }
     }
 }

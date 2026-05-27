@@ -27,15 +27,24 @@ import org.koin.core.parameter.parametersOf
 fun ReportDetailScreen(
     reportId: String,
     onBack: () -> Unit,
+    showBackArrow: Boolean = true,
     viewModel: ReportDetailViewModel = koinViewModel(key = reportId, parameters = { parametersOf(reportId) })
 ) {
     val state by viewModel.state.collectAsState()
 
     Scaffold(
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             CenterAlignedTopAppBar(
                 title = { Text(stringResource(Res.string.report_detail_title)) },
-                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(Res.string.back_content_description)) } }
+                windowInsets = WindowInsets(0, 0, 0, 0),
+                navigationIcon = {
+                    if (showBackArrow) {
+                        IconButton(onClick = onBack) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(Res.string.back_content_description))
+                        }
+                    }
+                }
             )
         }
     ) { padding ->

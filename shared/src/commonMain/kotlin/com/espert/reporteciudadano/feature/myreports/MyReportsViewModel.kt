@@ -20,7 +20,8 @@ class MyReportsViewModel(
 
     fun processIntent(intent: MyReportsIntent) {
         when (intent) {
-            is MyReportsIntent.SelectReport -> { /* handled by callback */ }
+            is MyReportsIntent.SelectReport -> _state.update { it.copy(selectedReportId = intent.id) }
+            MyReportsIntent.ClearSelection -> _state.update { it.copy(selectedReportId = null) }
             MyReportsIntent.Refresh -> refreshSyncStates()
         }
     }

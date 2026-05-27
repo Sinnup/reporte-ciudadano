@@ -57,4 +57,5 @@
     <string name="sync_notification_action_retry">Reintentar sincronización</string>
     <string name="sync_snackbar_message">Error al sincronizar &quot;%1$s&quot;. Vuelve a abrir la aplicación cuando tengas conexión para reintentar.</string>
     <string name="sync_snackbar_action">Reintentar sincronización</string>
+    <string name="no_report_selected">Selecciona un reporte para ver sus detalles</string>
 </resources>
