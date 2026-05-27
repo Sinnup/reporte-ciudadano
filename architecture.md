@@ -60,6 +60,7 @@ One branch per feature. Never develop two features in parallel.
 | 11 | FEAT-011 | Offline-First Location | `feature/feat-011-offline-first-location` |
 | 12 | FEAT-012 | Greeting in test.md | `feature/feat-012-greeting-test` |
 | 13 | FEAT-013 | Cloud Sync — DynamoDB + S3 | `feature/feat-013-cloud-sync` |
+| 14 | FEAT-014 | Tablet & Large-Screen Adaptive Layout | `feature/feat-014-adaptive-layout` |
 
 ---
 
@@ -871,6 +872,203 @@ No new Gradle submodule. All changes are within `:shared` `commonMain` and platf
 - [x] No new library dependencies
 - [x] No module dependency cycles — `ReportDetailViewModel` now depends on `ReverseGeocodeUseCase` which already exists in the DI graph
 - [x] `AppModule.kt` update: one binding change (`ReportDetailViewModel`); no new modules
+
+---
+
+## FEAT-014 — Tablet & Large-Screen Adaptive Layout
+
+### Context
+
+All existing screens use `Scaffold` with a `NavigationBar` at the bottom shell and single-column content. No layout breakpoints exist anywhere in the codebase. On wide viewports — Android tablets, iPad, and browser windows wider than ~600dp — the UI stretches to fill the full width, producing uncomfortably long text lines, oversized buttons, and a bottom `NavigationBar` that is considered an anti-pattern on large screens by Material3 guidelines.
+
+### Window Size Class Strategy
+
+Compose Multiplatform 1.11.0 ships `androidx.compose.material3.adaptive` package support via the CMP umbrella. The relevant API is:
+
+- `currentWindowAdaptiveInfo(): WindowAdaptiveInfo` — available in `commonMain` via `androidx.compose.material3.adaptive:adaptive` (part of the `material3` umbrella in CMP 1.11.0).
+- `WindowAdaptiveInfo.windowSizeClass: WindowSizeClass` — provides `widthSizeClass` and `heightSizeClass`.
+- Width breakpoints: `WindowWidthSizeClass.Compact` (< 600dp), `Medium` (600–840dp), `Expanded` (> 840dp).
+
+This is the single, correct API to use. No `BoxWithConstraints` hacks and no `expect/actual` platform size reads are needed — CMP delivers this in `commonMain`.
+
+A new file `shared/src/commonMain/kotlin/com/espert/reporteciudadano/ui/adaptive/WindowSizeExt.kt` exposes one helper:
+
+```kotlin
+@Composable
+fun isExpandedWidth(): Boolean =
+    currentWindowAdaptiveInfo().windowSizeClass.windowWidthSizeClass == WindowWidthSizeClass.EXPANDED
+```
+
+No broader enum or sealed class is introduced at this stage — the product only needs a binary compact vs. expanded distinction for the navigation chrome and the list-detail split.
+
+### New Library Entry Required
+
+`material3-adaptive` is not yet in `libs.versions.toml`. The following entry must be added:
+
+```toml
+[versions]
+material3-adaptive = "1.1.0"   # stable release aligned with CMP 1.11.0
+
+[libraries]
+compose-material3-adaptive = { module = "org.jetbrains.compose.material3:material3-adaptive", version.ref = "material3-adaptive" }
+```
+
+This is the only new library dependency introduced by this feature.
+
+### Navigation Chrome Adaptation
+
+#### Compact (< 600dp) — unchanged
+`MainScreen` continues to use a `NavigationBar` at the bottom. No change to existing screens.
+
+#### Medium and Expanded (>= 600dp) — NavigationRail
+`MainScreen` switches from `NavigationBar` to a `NavigationRail` on the left edge. The `Scaffold.bottomBar` is omitted; instead the shell uses a `Row { NavigationRail(...); content() }` pattern.
+
+The `MainScreen` composable accepts a boolean parameter `useRail: Boolean` derived from `isExpandedWidth()` at the call site in `App.kt`. No ViewModel changes are required — navigation intent is unchanged.
+
+`App.kt` change: the `MainScreen(...)` call site reads `isExpandedWidth()` once and passes the result. `currentWindowAdaptiveInfo()` must be called at the root composable level so recomposition is scoped to `App`.
+
+### Two-Pane (Master–Detail) Adaptation
+
+The following screens are candidates for a side-by-side layout on Expanded widths:
+
+| Screen pair | Master | Detail | Priority |
+|---|---|---|---|
+| My Reports + Report Detail | `MyReportsScreen` list | `ReportDetailScreen` | High — canonical list-detail |
+| Reports Map + Report Detail | `ReportsMapScreen` map | `ReportDetailScreen` | High — map+detail is standard UX for map apps |
+
+#### My Reports — Two-Pane
+
+On Expanded width, `MyReportsScreen` renders the report list in a left pane (~360dp fixed, or weight 0.4f) and a right pane (weight 0.6f) that renders `ReportDetailScreen` inline when a report is selected, or an empty-selection placeholder when none is selected.
+
+The selected report ID is held in `MyReportsState`:
+
+```
+MyReportsState
+  ...existing fields...
+  selectedReportId : String? = null   // null = no detail pane shown
+```
+
+New intent:
+
+```
+MyReportsIntent
+  ...existing...
+  data class SelectReport(val id: String) : MyReportsIntent()
+  object ClearSelection : MyReportsIntent()
+```
+
+On Compact width, `SelectReport` triggers `onReportSelected(id)` navigation (existing behaviour). On Expanded width, `SelectReport` updates `selectedReportId` in state instead of navigating — the detail pane renders inline. `onReportSelected` callback is still present on `MyReportsScreen` for Compact routing.
+
+The screen does NOT require a new ViewModel — `MyReportsViewModel` gains the `selectedReportId` field and the two new intents. No repository or use-case changes are needed.
+
+#### Reports Map — Two-Pane
+
+On Expanded width, `ReportsMapScreen` renders the map in a left pane (weight 0.6f) and a right pane (weight 0.4f) that shows `ReportDetailScreen` inline when a pin is tapped, or an empty placeholder otherwise.
+
+`ReportsMapState` gains:
+
+```
+ReportsMapState
+  ...existing fields...
+  selectedReportId : String? = null
+```
+
+New intent mirroring the My Reports pattern:
+
+```
+ReportsMapIntent (new sealed class — currently no Intent file exists for this screen)
+  data class SelectPin(val reportId: String) : ReportsMapIntent()
+  object ClearSelection : ReportsMapIntent()
+```
+
+`ReportsMapViewModel` currently has no `processIntent` method. This feature introduces it with just these two intents. No domain or repository changes are needed.
+
+#### Camera Flow, Report Form, Photo Review, Thank You
+
+These are modal full-screen flows triggered from the Report tab. They do not benefit from a side-by-side split — they remain single-column on all widths. However, on Expanded widths the content should be horizontally centred with a maximum width of 600dp to avoid overly wide text fields and photo strips:
+
+```kotlin
+Modifier.widthIn(max = 600.dp).align(Alignment.CenterHorizontally)
+```
+
+This modifier is applied to the root `Column` / `Box` in: `ReportFormScreen`, `PhotoReviewScreen`, `CameraScreen` (permission-denied states only — active camera view fills the screen), and `ThankYouScreen`. The `Scaffold` itself still fills full width; the content column is constrained.
+
+### AppViewModel Impact
+
+`AppViewModel` currently drives navigation for the full-screen Compact flow (navigating to `ReportDetail`). On Expanded width, tapping a report in `MyReportsScreen` or a pin in `ReportsMapScreen` must NOT push `NavDestination.ReportDetail` onto the stack — it must update the respective ViewModel's `selectedReportId` instead. The `onReportSelected: (String) -> Unit` lambda passed to both screens will behave differently depending on `isExpandedWidth()` at the `App.kt` call site:
+
+```kotlin
+// In App.kt, at the MainShell branch:
+val expanded = isExpandedWidth()
+MainScreen(
+    ...
+    onReportSelected = { id ->
+        if (expanded) {
+            // No-op: each screen handles this via its own intent
+        } else {
+            appViewModel.navigate(NavDestination.ReportDetail(id))
+        }
+    }
+)
+```
+
+The Expanded path passes the selection directly via each screen's own `onReportSelected` lambda that is wired to dispatch the appropriate ViewModel intent. This avoids coupling `AppViewModel` to window size.
+
+### Empty-State Placeholder for Detail Pane
+
+When no report is selected in the two-pane layout, the right pane shows a single stateless composable:
+
+```
+shared/src/commonMain/kotlin/com/espert/reporteciudadano/ui/adaptive/NoSelectionPlaceholder.kt
+```
+
+It renders a centred `Icon(Icons.Outlined.Article)` + a string key `no_report_selected` ("Select a report to view its details" / "Selecciona un reporte para ver sus detalles").
+
+### New String Keys
+
+| Key | English | Spanish |
+|---|---|---|
+| `no_report_selected` | Select a report to view its details | Selecciona un reporte para ver sus detalles |
+
+### Module Placement
+
+All changes are within `:shared` `commonMain`. No new Gradle submodule is required. The new files are:
+
+| File | Purpose |
+|---|---|
+| `ui/adaptive/WindowSizeExt.kt` | `isExpandedWidth()` helper |
+| `ui/adaptive/NoSelectionPlaceholder.kt` | Empty detail pane composable |
+
+### Platform-Specific Notes
+
+| Platform | Notes |
+|---|---|
+| **Android phones** | Always `Compact` — no layout change |
+| **Android tablets** | `Medium` (7–8") or `Expanded` (10"+) — NavigationRail + two-pane activated |
+| **iPad** | CMP on iOS reports window size through `UIWindow.bounds`. `Expanded` on 12.9" Pro; `Medium` on 11". Both trigger NavigationRail. Two-pane only on `Expanded`. |
+| **Web / browser** | `Expanded` when browser width > 840px. Resizing triggers recomposition via `currentWindowAdaptiveInfo()` — reactive by default. |
+
+No `expect/actual` is required. `currentWindowAdaptiveInfo()` handles platform differences internally within the CMP runtime.
+
+### ViewModel Scoping Note
+
+`MyReportsViewModel` and `ReportsMapViewModel` are scoped to the Activity (existing constraint). `selectedReportId` persists across navigation — this is acceptable behaviour. The `ClearSelection` intent should be dispatched when the shell tab changes so the detail pane is cleared when the user switches tabs.
+
+### Design Checklist
+
+- [x] Window size API chosen: `currentWindowAdaptiveInfo()` from `material3-adaptive` — no expect/actual
+- [x] New library: `compose-material3-adaptive` added to version catalog
+- [x] Navigation chrome: `NavigationBar` on Compact, `NavigationRail` on Medium/Expanded — wired via `isExpandedWidth()` in `App.kt`
+- [x] Two-pane screens: `MyReportsScreen` and `ReportsMapScreen` on Expanded width
+- [x] Modal-flow screens: constrained to 600dp max-width on wide viewports
+- [x] `MyReportsState.selectedReportId` + `MyReportsIntent.SelectReport/ClearSelection` defined
+- [x] `ReportsMapState.selectedReportId` + `ReportsMapIntent` (new sealed class) defined
+- [x] `AppViewModel` routing logic for Compact vs Expanded identified — no new state in AppViewModel
+- [x] `NoSelectionPlaceholder` composable defined
+- [x] New string key `no_report_selected` (EN + ES)
+- [x] Platform boundaries confirmed: no expect/actual needed
+- [x] Module placement: all within `:shared` commonMain; no new Gradle submodule
+- [x] No module dependency cycles introduced
 
 ---
 

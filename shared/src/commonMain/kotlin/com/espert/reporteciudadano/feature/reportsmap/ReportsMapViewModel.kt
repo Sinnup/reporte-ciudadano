@@ -20,4 +20,11 @@ class ReportsMapViewModel(private val getAllReports: GetAllReportsUseCase) : Vie
             )
         }
     }
+
+    fun processIntent(intent: ReportsMapIntent) {
+        when (intent) {
+            is ReportsMapIntent.SelectPin -> _state.update { it.copy(selectedReportId = intent.reportId) }
+            ReportsMapIntent.ClearSelection -> _state.update { it.copy(selectedReportId = null) }
+        }
+    }
 }

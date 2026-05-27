@@ -8,5 +8,7 @@ data class MyReportsState(
     val isLoading: Boolean = true,
     val error: String? = null,
     /** Sync status per report ID. Reports absent from the map default to PENDING. */
-    val syncStates: Map<String, SyncStatus> = emptyMap()
+    val syncStates: Map<String, SyncStatus> = emptyMap(),
+    /** ID of the report selected in two-pane expanded layout. Null means no report selected. */
+    val selectedReportId: String? = null
 )

@@ -15,6 +15,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.espert.reporteciudadano.domain.model.ReportStatus
 import com.espert.reporteciudadano.domain.model.SyncStatus
+import com.espert.reporteciudadano.feature.reportdetail.ReportDetailScreen
+import com.espert.reporteciudadano.ui.adaptive.NoSelectionPlaceholder
+import com.espert.reporteciudadano.ui.adaptive.isExpandedWidth
 import org.jetbrains.compose.resources.stringResource
 import reporteciudadano.shared.generated.resources.Res
 import reporteciudadano.shared.generated.resources.*
@@ -27,9 +30,30 @@ fun MyReportsScreen(
     viewModel: MyReportsViewModel = koinViewModel()
 ) {
     val state by viewModel.state.collectAsState()
+    val expanded = isExpandedWidth()
 
+    if (expanded) {
+        MyReportsTwoPane(
+            state = state,
+            onIntent = viewModel::processIntent
+        )
+    } else {
+        MyReportsSinglePane(
+            state = state,
+            onReportSelected = onReportSelected
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun MyReportsSinglePane(
+    state: MyReportsState,
+    onReportSelected: (String) -> Unit
+) {
     Scaffold(
-        topBar = { CenterAlignedTopAppBar(title = { Text(stringResource(Res.string.my_reports_title)) }) }
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
+        topBar = { CenterAlignedTopAppBar(title = { Text(stringResource(Res.string.my_reports_title)) }, windowInsets = WindowInsets(0, 0, 0, 0)) }
     ) { padding ->
         Box(Modifier.padding(padding).fillMaxSize()) {
             when {
@@ -38,32 +62,100 @@ fun MyReportsScreen(
                     stringResource(Res.string.no_reports_message),
                     Modifier.align(Alignment.Center).padding(32.dp)
                 )
-                else -> LazyColumn {
-                    items(state.reports) { report ->
-                        ElevatedCard(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 4.dp)
-                                .clickable { onReportSelected(report.id) }
-                        ) {
-                            Row(
-                                Modifier.padding(16.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    report.title,
-                                    style = MaterialTheme.typography.titleMedium,
-                                    modifier = Modifier.weight(1f)
-                                )
-                                SyncStatusIcon(
-                                    syncStatus = state.syncStates[report.id] ?: SyncStatus.PENDING,
-                                    modifier = Modifier.padding(end = 8.dp)
-                                )
-                                StatusChip(report.status)
-                            }
-                        }
-                    }
+                else -> ReportCardList(
+                    state = state,
+                    selectedReportId = null,
+                    onCardClick = onReportSelected
+                )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun MyReportsTwoPane(
+    state: MyReportsState,
+    onIntent: (MyReportsIntent) -> Unit
+) {
+    Row(Modifier.fillMaxSize()) {
+        // Left pane — report list
+        Column(Modifier.weight(0.4f).fillMaxHeight()) {
+            CenterAlignedTopAppBar(title = { Text(stringResource(Res.string.my_reports_title)) }, windowInsets = WindowInsets(0, 0, 0, 0))
+            Box(Modifier.fillMaxSize()) {
+                when {
+                    state.isLoading -> CircularProgressIndicator(Modifier.align(Alignment.Center))
+                    state.reports.isEmpty() -> Text(
+                        stringResource(Res.string.no_reports_message),
+                        Modifier.align(Alignment.Center).padding(32.dp)
+                    )
+                    else -> ReportCardList(
+                        state = state,
+                        selectedReportId = state.selectedReportId,
+                        onCardClick = { id -> onIntent(MyReportsIntent.SelectReport(id)) }
+                    )
+                }
+            }
+        }
+
+        VerticalDivider(
+            thickness = 1.dp,
+            color = MaterialTheme.colorScheme.outlineVariant
+        )
+
+        // Right pane — detail or placeholder
+        Box(Modifier.weight(0.6f).fillMaxHeight()) {
+            val selectedId = state.selectedReportId
+            if (selectedId != null) {
+                ReportDetailScreen(
+                    reportId = selectedId,
+                    onBack = { onIntent(MyReportsIntent.ClearSelection) },
+                    showBackArrow = false
+                )
+            } else {
+                NoSelectionPlaceholder()
+            }
+        }
+    }
+}
+
+@Composable
+private fun ReportCardList(
+    state: MyReportsState,
+    selectedReportId: String?,
+    onCardClick: (String) -> Unit
+) {
+    LazyColumn {
+        items(state.reports) { report ->
+            val isSelected = selectedReportId == report.id
+            ElevatedCard(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 4.dp)
+                    .clickable { onCardClick(report.id) },
+                colors = if (isSelected) {
+                    CardDefaults.elevatedCardColors(
+                        containerColor = MaterialTheme.colorScheme.secondaryContainer
+                    )
+                } else {
+                    CardDefaults.elevatedCardColors()
+                }
+            ) {
+                Row(
+                    Modifier.padding(16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        report.title,
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.weight(1f)
+                    )
+                    SyncStatusIcon(
+                        syncStatus = state.syncStates[report.id] ?: SyncStatus.PENDING,
+                        modifier = Modifier.padding(end = 8.dp)
+                    )
+                    StatusChip(report.status)
                 }
             }
         }

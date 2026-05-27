@@ -9,6 +9,10 @@ Format: `[version] — YYYY-MM-DD`
 
 ## [Unreleased]
 
+### Added — 2026-05-27
+
+- **FEAT-014 — Tablet & Large-Screen Adaptive Layout**: introduced `WindowSizeCompat.kt` with `isExpandedWidth()` (>=840dp) and `isMediumOrLargerWidth()` (>=600dp) helpers using `LocalWindowInfo`; `NoSelectionPlaceholder.kt` empty-state composable shown in the detail pane before a report is selected; `MainScreen` switches from `NavigationBar` to `NavigationRail` on medium/large screens and dispatches `ClearSelection` on tab switch; `MyReportsScreen` renders a two-pane list+detail split (0.4f / 0.6f) at expanded width with selected card highlighted in `secondaryContainer`; `ReportsMapScreen` renders a two-pane map+detail split (0.6f / 0.4f) at expanded width with `clipToBounds()` and zero-inset `TopAppBar`; `ReportDetailScreen` gains a `showBackArrow: Boolean = true` parameter so the back arrow is hidden in the two-pane context; `ReportFormScreen` inner column capped at 600dp and centred on wide viewports; `MapView.android.kt` given explicit `MATCH_PARENT` layout params to prevent layout thrashing during drag; new `ReportsMapIntent` sealed class with `SelectPin(reportId)` and `ClearSelection`; `MyReportsState/Intent/ViewModel` extended with `selectedReportId`, `ClearSelection`, and `SelectReport(id)`; `ReportsMapState/ViewModel` extended with `selectedReportId`, `SelectPin`, and `ClearSelection`; `App.kt` wires `ClearSelection` callbacks from the root and passes a no-op `onReportSelected` at expanded width to keep `AppViewModel` nav stack clean; `no_report_selected` string key added to `values/strings.xml` and `values-es/strings.xml`; 9 new unit tests in `MyReportsAdaptiveTest` and `ReportsMapAdaptiveTest`, all passing.
+
 ### Fixed — 2026-05-26
 
 - **FEAT-013 — Eager sync trigger**: `ReportFormViewModel.onReportSaved` callback wired to `SyncScheduler.scheduleEagerSync()` in `ReporteCiudadanoApp` so a sync job is enqueued immediately after the citizen submits a report, without waiting for the next periodic background window.
